@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart3, Boxes, LogOut, PackagePlus, ShoppingBag, Tags, Users, Warehouse, Menu } from "lucide-react";
+import { BarChart3, Boxes, Images, LogOut, ShoppingBag, Tags, Users, Menu } from "lucide-react";
 import { NotificationsBell } from "./notifications-bell";
 import { useSession, signOut } from "next-auth/react";
 import { useState } from "react";
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/categories", label: "Categories", icon: Tags },
+  { href: "/admin/slider", label: "Slider", icon: Images },
 ];
 
 export function AdminShell({ children }: { children: React.ReactNode }) {
@@ -24,12 +25,12 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-[#f3f4f5] text-slate-950 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#F1EFE8] text-[#2C2C2A] flex flex-col md:flex-row">
       <aside
-        className={`fixed inset-y-0 left-0 z-20 flex flex-col border-r border-slate-200 bg-[#f3f4f5] transition-all duration-300
+        className={`fixed inset-y-0 left-0 z-20 flex flex-col border-r border-[#D3D1C7] bg-[#F1EFE8] transition-all duration-300
         ${isMobileOpen ? "w-64" : "w-16 md:w-64"}`}
       >
-        <div className="flex h-16 items-center justify-between border-b border-slate-200 px-4 md:px-6">
+        <div className="flex h-16 items-center justify-between border-b border-[#D3D1C7] px-4 md:px-6">
           <Link
             href="/admin/dashboard"
             className={`text-lg font-semibold whitespace-nowrap overflow-hidden transition-all ${isMobileOpen ? "w-auto opacity-100" : "w-0 opacity-0 md:w-auto md:opacity-100"}`}
@@ -37,13 +38,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             Admin Panel
           </Link>
           <button
-            className="md:hidden p-1 rounded-md hover:bg-slate-200"
+            className="md:hidden p-1 rounded-md hover:bg-[#D3D1C7]/50"
             onClick={() => setIsMobileOpen(!isMobileOpen)}
           >
             <Menu className="size-5" />
           </button>
         </div>
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -58,7 +59,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 title={!isMobileOpen ? item.label : undefined}
                 className={`
                   flex items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-all whitespace-nowrap overflow-hidden
-                  ${isActive ? "bg-[#185FA5] text-white shadow-sm" : "text-[#5F5E5A] hover:bg-[#E6F1FB] hover:text-[#185FA5]"}
+                  ${isActive ? "bg-[#185FA5] text-white shadow-sm" : "text-[#5F5E5A] hover:bg-[#185FA5]/10 hover:text-[#185FA5]"}
                   ${isMobileOpen ? "gap-3" : "justify-center md:justify-start md:gap-3"}
                 `}
               >
@@ -72,24 +73,24 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
       <div className="flex-1 transition-all duration-300 ml-16 md:ml-64">
-        <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-slate-200 bg-white/95 px-4 backdrop-blur md:px-8">
+        <header className="sticky top-0 z-10 flex min-h-16 items-center justify-between border-b border-[#D3D1C7] bg-white/95 px-4 backdrop-blur md:px-8">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 hidden sm:block">Admin Console</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#888780] hidden sm:block">Admin Console</p>
             <p className="text-lg font-semibold sm:hidden">Admin Panel</p>
           </div>
           <div className="flex items-center gap-4">
             <NotificationsBell />
-            <div className="h-6 w-px bg-slate-300"></div>
+            <div className="h-6 w-px bg-[#D3D1C7]"></div>
             <div className="flex items-center gap-3">
               {session?.user && (
                 <div className="hidden text-right text-sm sm:block">
-                  <p className="font-medium text-slate-900">{session.user.name}</p>
-                  <p className="text-xs text-slate-500">{session.user.email}</p>
+                  <p className="font-medium text-[#2C2C2A]">{session.user.name}</p>
+                  <p className="text-xs text-[#888780]">{session.user.email}</p>
                 </div>
               )}
               <button
                 onClick={() => signOut({ callbackUrl: "/admin/login" })}
-                className="flex items-center justify-center rounded-md bg-slate-100 p-2 text-slate-600 transition hover:bg-slate-200 hover:text-slate-900"
+                className="flex items-center justify-center rounded-md bg-[#F1EFE8] p-2 text-[#5F5E5A] transition hover:bg-[#D3D1C7] hover:text-[#2C2C2A]"
                 title="Logout"
               >
                 <LogOut className="size-4" />

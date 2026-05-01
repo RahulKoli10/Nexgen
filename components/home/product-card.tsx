@@ -144,15 +144,15 @@ export default function ProductCard({ product }: ProductCardProps) {
             className={`product-image${imageLoaded ? " is-loaded" : ""}`}
             onLoad={() => setLoadedImageUrl(imageUrl)}
           />
-          <div className="product-image-overlay">
+          {/* <div className="product-image-overlay">
             <span>Open product</span>
             <ArrowUpRight className="size-4" />
-          </div>
+          </div> */}
         </div>
         <CardContent className="product-copy px-5 pb-5">
           <div>
             <h3>{product.name}</h3>
-            <p>{product.description}</p>
+            {/* <p>{product.description}</p> */}
           </div>
           <div className="product-meta">
             <strong>{product.price}</strong>

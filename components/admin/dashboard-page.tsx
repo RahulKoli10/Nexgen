@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import axios from "axios";
 import {
   CartesianGrid,
   Line,
@@ -14,7 +14,6 @@ import {
 } from "recharts";
 import type { OrderStatus } from "@/components/admin/types";
 import { formatCurrency, formatShortDate } from "@/components/admin/types";
-import { queryKeys } from "@/lib/query-keys";
 
 type Stats = {
   totalOrders: number;
@@ -47,46 +46,40 @@ const statusClass: Record<OrderStatus, string> = {
   CONFIRMED: "bg-blue-100 text-blue-800",
   SHIPPED: "bg-orange-100 text-orange-800",
   DELIVERED: "bg-green-100 text-green-800",
+  RETURN_REQUESTED: "bg-[#FAEEDA] text-[#633806]",
+  RETURNED: "bg-[#F1EFE8] text-[#5F5E5A]",
   CANCELLED: "bg-red-100 text-red-800",
 };
 
 export function DashboardPage() {
   const router = useRouter();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [revenue, setRevenue] = useState<RevenuePoint[]>([]);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [recentOrders, setRecentOrders] = useState<RecentOrder[]>([]);
   const [isChartReady, setIsChartReady] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setIsChartReady(true));
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
 
-  const dashboardQuery = useQuery({
-    queryKey: queryKeys.admin.dashboard,
-    queryFn: async () => {
+    async function loadDashboard() {
       const [statsResponse, revenueResponse, topProductsResponse, ordersResponse] = await Promise.all([
-        fetch("/api/admin/stats"),
-        fetch("/api/admin/stats/revenue?days=7"),
-        fetch("/api/admin/stats/top-products"),
-        fetch("/api/admin/orders?limit=10&sort=createdAt_desc"),
+        axios.get("/api/admin/stats"),
+        axios.get("/api/admin/stats/revenue", { params: { days: 7 } }),
+        axios.get("/api/admin/stats/top-products"),
+        axios.get("/api/admin/orders", { params: { limit: 10, sort: "createdAt_desc" } }),
       ]);
 
-      const statsData = await statsResponse.json();
-      const revenueData = await revenueResponse.json();
-      const topProductsData = await topProductsResponse.json();
-      const ordersData = await ordersResponse.json();
+      setStats(statsResponse.data);
+      setRevenue(revenueResponse.data);
+      setTopProducts(topProductsResponse.data);
+      setRecentOrders(ordersResponse.data.orders ?? []);
+    }
 
-      return {
-        stats: statsData as Stats,
-        revenue: revenueData as RevenuePoint[],
-        topProducts: topProductsData as TopProduct[],
-        recentOrders: (ordersData.orders ?? []) as RecentOrder[],
-      };
-    },
-  });
+    loadDashboard();
 
-  const stats = dashboardQuery.data?.stats ?? null;
-  const revenue = dashboardQuery.data?.revenue ?? [];
-  const topProducts = dashboardQuery.data?.topProducts ?? [];
-  const recentOrders = dashboardQuery.data?.recentOrders ?? [];
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const chartData = useMemo(
     () =>

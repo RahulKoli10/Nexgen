@@ -38,6 +38,11 @@ export async function createNotification(
       message = `Your order #${data.orderId?.slice(-8).toUpperCase()} has been delivered. Enjoy!`;
       link = `/orders/${data.orderId}`;
       break;
+    case "ORDER_RETURNED":
+      title = "Return Approved";
+      message = `Your return for order #${data.orderId?.slice(-8).toUpperCase()} has been approved.`;
+      link = `/orders/${data.orderId}`;
+      break;
     case "ORDER_CANCELLED":
       title = "Order Cancelled";
       message = `Your order #${data.orderId?.slice(-8).toUpperCase()} has been cancelled.`;

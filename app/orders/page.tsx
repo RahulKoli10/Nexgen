@@ -43,7 +43,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast-context";
 
-type OrderStatus = "ALL" | "PENDING" | "CONFIRMED" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+type OrderStatus = "ALL" | "PENDING" | "CONFIRMED" | "SHIPPED" | "DELIVERED" | "RETURN_REQUESTED" | "RETURNED" | "CANCELLED";
 
 type OrderItem = {
   id: string;
@@ -86,6 +86,7 @@ const statusTabs: { label: string; value: OrderStatus }[] = [
   { label: "Active", value: "CONFIRMED" },
   { label: "Shipped", value: "SHIPPED" },
   { label: "Delivered", value: "DELIVERED" },
+  { label: "Returns", value: "RETURN_REQUESTED" },
   { label: "Cancelled", value: "CANCELLED" },
 ];
 
@@ -123,7 +124,7 @@ function formatDateTime(value: string) {
 
 function normalizeStatus(status: string): OrderStatus {
   const normalized = status.toUpperCase();
-  if (["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "CANCELLED"].includes(normalized)) {
+  if (["PENDING", "CONFIRMED", "SHIPPED", "DELIVERED", "RETURN_REQUESTED", "RETURNED", "CANCELLED"].includes(normalized)) {
     return normalized as OrderStatus;
   }
 
@@ -134,6 +135,8 @@ function getStatusCopy(status: string) {
   const normalized = normalizeStatus(status);
 
   if (normalized === "DELIVERED") return "Delivered to your address";
+  if (normalized === "RETURN_REQUESTED") return "Return requested";
+  if (normalized === "RETURNED") return "Returned";
   if (normalized === "SHIPPED") return "On the way";
   if (normalized === "CANCELLED") return "Order cancelled";
   if (normalized === "CONFIRMED") return "Packing in progress";
@@ -152,7 +155,7 @@ function getPaymentStatusLabel(order: Order) {
 
 function getStepIndex(status: string) {
   const normalized = normalizeStatus(status);
-  if (normalized === "DELIVERED") return 3;
+  if (normalized === "DELIVERED" || normalized === "RETURN_REQUESTED" || normalized === "RETURNED") return 3;
   if (normalized === "SHIPPED") return 2;
   if (normalized === "CONFIRMED") return 1;
   return 0;
@@ -317,6 +320,7 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus>("ALL");
   const [query, setQuery] = useState("");
   const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
+  const [returningOrderId, setReturningOrderId] = useState<string | null>(null);
   const [cancelOrder, setCancelOrder] = useState<Order | null>(null);
 
   const ordersQuery = useQuery({
@@ -398,6 +402,24 @@ export default function OrdersPage() {
     setCancellingOrderId(orderId);
 
     cancelOrderMutation.mutate(orderId);
+  };
+
+  const requestReturn = async (order: Order) => {
+    setReturningOrderId(order.id);
+
+    try {
+      await axios.post("/api/order/user", { orderId: order.id, action: "return" });
+      setOrders((prev) =>
+        prev.map((item) =>
+          item.id === order.id ? { ...item, status: "RETURN_REQUESTED" } : item,
+        ),
+      );
+      showToast("Return request sent.", "success");
+    } catch {
+      showToast("Unable to request return for this order.", "error");
+    } finally {
+      setReturningOrderId(null);
+    }
   };
 
   const handleTrack = (order: Order) => {
@@ -535,9 +557,12 @@ export default function OrdersPage() {
               const status = normalizeStatus(order.status);
               const isCancelled = status === "CANCELLED";
               const isDelivered = status === "DELIVERED";
+              const isReturnRequested = status === "RETURN_REQUESTED";
+              const isReturned = status === "RETURNED";
               const activeStep = getStepIndex(order.status);
               const itemCount = order.items?.reduce((sum, item) => sum + item.quantity, 0) || 0;
-              const canCancel = !isCancelled && !isDelivered;
+              const canCancel = !isCancelled && !isDelivered && !isReturnRequested && !isReturned;
+              const canRequestReturn = isDelivered;
               const addressParts = [
                 order.address?.line1,
                 order.address?.line2,
@@ -656,6 +681,16 @@ export default function OrdersPage() {
                       >
                         <XCircle className="size-4" />
                         {cancellingOrderId === order.id ? "Cancelling..." : "Cancel"}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="orders-outline-button"
+                        onClick={() => requestReturn(order)}
+                        disabled={!canRequestReturn || returningOrderId === order.id}
+                      >
+                        <RotateCcw className="size-4" />
+                        {returningOrderId === order.id ? "Requesting..." : "Request Return"}
                       </Button>
                     </div>
                   </CardContent>

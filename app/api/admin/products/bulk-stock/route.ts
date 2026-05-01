@@ -4,13 +4,30 @@ import { prisma } from "@/lib/prisma";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { notifyAdmins } from "@/lib/notifications";
+import { PAGE_SIZE } from "@/components/admin/constants";
 
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const variants = await prisma.productVariant.findMany({
-      include: { product: { select: { name: true } } },
-    });
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const params = request.nextUrl.searchParams;
+    const page = Math.max(1, Number(params.get("page") ?? 1));
+    const limit = Math.max(1, Number(params.get("limit") ?? PAGE_SIZE));
+
+    const [variants, total] = await prisma.$transaction([
+      prisma.productVariant.findMany({
+        include: { product: { select: { name: true } } },
+        orderBy: { sku: "asc" },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      prisma.productVariant.count(),
+    ]);
+
     return NextResponse.json({
       variants: variants.map((v) => ({
         variantId: v.id,
@@ -18,6 +35,9 @@ export async function GET() {
         variantName: v.name,
         stock: v.stock,
       })),
+      total,
+      page,
+      limit,
     });
   } catch {
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
@@ -27,8 +47,8 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const body = await request.json();

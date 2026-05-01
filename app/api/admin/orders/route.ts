@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma, OrderStatus } from "@prisma/client";
 import { adminOrderInclude, formatAdminOrder } from "@/lib/admin-orders";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { PAGE_SIZE } from "@/components/admin/constants";
 
 export async function GET(request: NextRequest) {
+  const session = await getServerSession(authOptions);
+  if (session?.user?.role !== "ADMIN") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const params = request.nextUrl.searchParams;
   const statusParam = params.get("status") ?? "";
   const searchParam = params.get("search")?.trim().toLowerCase() ?? "";
@@ -11,7 +19,7 @@ export async function GET(request: NextRequest) {
   const toParam = params.get("to") ?? "";
   
   const rawPage = Number(params.get("page") ?? 1);
-  const rawLimit = Number(params.get("limit") ?? 10);
+  const rawLimit = Number(params.get("limit") ?? PAGE_SIZE);
   const page = Number.isFinite(rawPage) ? Math.max(1, rawPage) : 1;
   const limit = Number.isFinite(rawLimit) ? Math.max(1, rawLimit) : 10;
 
@@ -39,7 +47,7 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const [orders, total] = await Promise.all([
+  const [orders, total] = await prisma.$transaction([
     prisma.order.findMany({
       where,
       include: adminOrderInclude,

@@ -2,15 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useSearchParams } from "next/navigation";
+import axios from "axios";
 import { DayPicker, type DateRange } from "react-day-picker";
-import { Download, Eye, ShoppingBag } from "lucide-react";
+import { Download, Eye, RotateCcw, ShoppingBag } from "lucide-react";
 import type { AdminOrder, OrderStatus } from "@/components/admin/types";
 import { formatCurrency, formatDateInput, formatShortDate, orderStatusClass } from "@/components/admin/types";
 import { SkeletonTable } from "./ui/skeleton-table";
 import { EmptyState } from "./ui/empty-state";
 import { Pagination } from "./ui/pagination";
-import { queryKeys } from "@/lib/query-keys";
+import { PAGE_SIZE } from "./constants";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import toast from "react-hot-toast";
 
 const statuses: Array<{ label: string; value: "" | OrderStatus }> = [
   { label: "All", value: "" },
@@ -18,22 +30,28 @@ const statuses: Array<{ label: string; value: "" | OrderStatus }> = [
   { label: "Confirmed", value: "CONFIRMED" },
   { label: "Shipped", value: "SHIPPED" },
   { label: "Delivered", value: "DELIVERED" },
+  { label: "Return Requested", value: "RETURN_REQUESTED" },
+  { label: "Returned", value: "RETURNED" },
   { label: "Cancelled", value: "CANCELLED" },
 ];
-
-const pageSize = 20;
 
 function paymentStatusLabel(status?: string) {
   return status === "PAID" ? "Paid" : "COD";
 }
 
 export function OrdersListPage() {
+  const searchParams = useSearchParams();
+  const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [status, setStatus] = useState<"" | OrderStatus>("");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [range, setRange] = useState<DateRange | undefined>();
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [total, setTotal] = useState(0);
+  const [returnOrder, setReturnOrder] = useState<AdminOrder | null>(null);
+  const [grantingReturnId, setGrantingReturnId] = useState<string | null>(null);
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const from = formatDateInput(range?.from);
   const to = formatDateInput(range?.to);
@@ -46,41 +64,40 @@ export function OrdersListPage() {
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const queryParams = {
-    status,
-    search,
-    from,
-    to,
-    page,
-    limit: pageSize,
-  };
+  useEffect(() => {
+    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
+  }, [searchParams]);
 
-  const ordersQuery = useQuery({
-    queryKey: queryKeys.admin.orders(queryParams),
-    queryFn: async () => {
-      const params = new URLSearchParams({
-        status,
-        search,
-        from,
-        to,
-        page: String(page),
-        limit: String(pageSize),
+  useEffect(() => {
+    async function loadOrders() {
+      setLoading(true);
+      const { data } = await axios.get("/api/admin/orders", {
+        params: { status, search, from, to, page, limit: PAGE_SIZE },
       });
-      const response = await fetch(`/api/admin/orders?${params.toString()}`);
-      const data = await response.json();
-      return {
-        orders: (data.orders ?? []) as AdminOrder[],
-        total: Number(data.total ?? 0),
-      };
-    },
-    placeholderData: (previousData) => previousData,
-  });
+      setOrders(data.orders ?? []);
+      setTotal(data.total ?? 0);
+      setLoading(false);
+    }
 
-  const orders = ordersQuery.data?.orders ?? [];
-  const total = ordersQuery.data?.total ?? 0;
-  const loading = ordersQuery.isLoading || ordersQuery.isFetching;
+    loadOrders();
+  }, [from, page, search, status, to]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+
+  async function grantReturn() {
+    if (!returnOrder) return;
+    setGrantingReturnId(returnOrder.id);
+    try {
+      const { data } = await axios.patch(`/api/admin/orders/${returnOrder.id}/return`);
+      setOrders((current) => current.map((order) => (order.id === returnOrder.id ? data.order : order)));
+      setReturnOrder(null);
+      toast.success("Return approved.");
+    } catch {
+      toast.error("Unable to approve return.");
+    } finally {
+      setGrantingReturnId(null);
+    }
+  }
 
   function exportCsv() {
     const params = new URLSearchParams({ status, from, to });
@@ -273,7 +290,7 @@ export function OrdersListPage() {
                   <th className="px-5 py-3">Payment</th>
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3">Actions</th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -304,13 +321,26 @@ export function OrdersListPage() {
                     </td>
                     <td className="px-5 py-4 text-slate-600">{formatShortDate(order.createdAt)}</td>
                     <td className="px-5 py-4">
-                      <Link
-                        href={`/admin/orders/${order.id}`}
-                        className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100"
-                        aria-label={`View order ${order.id}`}
-                      >
-                        <Eye className="size-4" />
-                      </Link>
+                      <div className="flex items-center justify-end gap-2">
+                        {order.status === "RETURN_REQUESTED" ? (
+                          <button
+                            type="button"
+                            onClick={() => setReturnOrder(order)}
+                            disabled={grantingReturnId === order.id}
+                            className="inline-flex h-9 items-center gap-2 rounded-md bg-[#185FA5] px-3 text-xs font-semibold text-white hover:bg-[#134f8a] disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            <RotateCcw className="size-4" />
+                            Grant Return
+                          </button>
+                        ) : null}
+                        <Link
+                          href={`/admin/orders/${order.id}`}
+                          className="inline-flex size-9 items-center justify-center rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100"
+                          aria-label={`View order ${order.id}`}
+                        >
+                          <Eye className="size-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -322,6 +352,27 @@ export function OrdersListPage() {
           </div>
         </section>
       )}
+      <AlertDialog open={Boolean(returnOrder)} onOpenChange={(open) => !open && setReturnOrder(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-lg font-semibold text-[#2C2C2A]">Grant return?</AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-6 text-[#5F5E5A]">
+              This will mark order #{returnOrder?.id.slice(-8).toUpperCase()} as returned and restore all item quantities to stock.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="h-10 rounded-md border border-[#D3D1C7] bg-white px-4 text-sm font-medium text-[#2C2C2A]">
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={grantReturn}
+              className="h-10 rounded-md bg-[#185FA5] px-4 text-sm font-medium text-white"
+            >
+              {grantingReturnId ? "Approving..." : "Grant Return"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

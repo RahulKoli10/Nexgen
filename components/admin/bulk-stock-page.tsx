@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import axios from "axios";
 import { Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { queryKeys } from "@/lib/query-keys";
+import { Pagination } from "./ui/pagination";
+import { PAGE_SIZE } from "./constants";
 
 type StockRow = {
   variantId: string;
@@ -14,57 +16,73 @@ type StockRow = {
 };
 
 export function BulkStockPage() {
-  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const [rows, setRows] = useState<StockRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState(false);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [total, setTotal] = useState(0);
 
-  const rowsQuery = useQuery({
-    queryKey: queryKeys.admin.bulkStock,
-    queryFn: async () => {
-      const response = await fetch("/api/admin/products/bulk-stock");
-      const data = await response.json();
-      return (data.variants ?? []) as StockRow[];
-    },
-  });
+  async function loadRows() {
+    const { data } = await axios.get("/api/admin/products/bulk-stock", {
+      params: { page, limit: PAGE_SIZE },
+    });
+    const nextRows = data.variants ?? [];
+    setRows(nextRows);
+    setTotal(data.total ?? 0);
+    setDrafts(
+      Object.fromEntries(nextRows.map((row: StockRow) => [row.variantId, row.stock]))
+    );
+  }
 
-  const rows = useMemo(() => rowsQuery.data ?? [], [rowsQuery.data]);
+  
+  useEffect(() => {
+    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
+  }, [searchParams]);
+
+  
+  useEffect(() => {
+    let isMounted = true;
+
+    axios.get("/api/admin/products/bulk-stock", {
+      params: { page, limit: PAGE_SIZE },
+    })
+      .then(({ data }) => {
+        if (!isMounted) return;
+        const nextRows = data.variants ?? [];
+        setRows(nextRows);
+        setTotal(data.total ?? 0);
+        setDrafts(Object.fromEntries(nextRows.map((row: StockRow) => [row.variantId, row.stock])));
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [page]);
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
   const changedRows = useMemo(
-    () =>
-      rows.filter(
-        (row) =>
-          Object.prototype.hasOwnProperty.call(drafts, row.variantId) &&
-          Number(drafts[row.variantId]) !== row.stock
-      ),
+    () => rows.filter((row) => Number(drafts[row.variantId]) !== row.stock),
     [drafts, rows]
   );
 
-  const saveStockMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch("/api/admin/products/bulk-stock", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+  async function saveChanges() {
+    setSaving(true);
+    try {
+      await axios.patch("/api/admin/products/bulk-stock", {
         updates: changedRows.map((row) => ({
           variantId: row.variantId,
           stock: Number(drafts[row.variantId]),
         })),
-      }),
-    });
-
-      if (!response.ok) throw new Error("Unable to update stock.");
-    },
-    onSuccess: async () => {
+      });
       toast.success("Stock updated.");
-      setDrafts({});
-      await queryClient.invalidateQueries({ queryKey: queryKeys.admin.bulkStock });
-    },
-    onError: () => {
+      await loadRows();
+    } catch {
       toast.error("Unable to update stock.");
-    },
-  });
-
-  async function saveChanges() {
-    saveStockMutation.mutate();
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -109,15 +127,18 @@ export function BulkStockPage() {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
           <p className="text-sm text-slate-500">{changedRows.length} pending changes</p>
-          <button
-            type="button"
-            disabled={saveStockMutation.isPending || changedRows.length === 0}
-            onClick={saveChanges}
-            className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Save className="size-4" />
-            {saveStockMutation.isPending ? "Saving..." : "Save all changes"}
-          </button>
+          <div className="flex items-center gap-3">
+            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            <button
+              type="button"
+              disabled={saving || changedRows.length === 0}
+              onClick={saveChanges}
+              className="inline-flex h-10 items-center gap-2 rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Save className="size-4" />
+              {saving ? "Saving..." : "Save all changes"}
+            </button>
+          </div>
         </div>
       </section>
     </div>

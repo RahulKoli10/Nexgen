@@ -93,6 +93,20 @@ export const cancelOrderById = async (orderId: string, userId: string) => {
   });
 };
 
+export const requestReturnById = async (orderId: string, userId: string) => {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+  });
+
+  if (!order || order.userId !== userId) throw new Error("Order not found or unauthorized");
+  if (order.status !== "DELIVERED") throw new Error("Only delivered orders can be returned");
+
+  return prisma.order.update({
+    where: { id: orderId },
+    data: { status: "RETURN_REQUESTED" },
+  });
+};
+
 export const createOrder = async ({
   userId,
   addressId,

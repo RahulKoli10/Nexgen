@@ -1,3 +1,6 @@
+"use client";
+
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
 
 interface PaginationProps {
@@ -7,7 +10,18 @@ interface PaginationProps {
 }
 
 export function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
   if (totalPages <= 1) return null;
+
+  const changePage = (page: number) => {
+    const nextPage = Math.min(Math.max(1, page), totalPages);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("page", String(nextPage));
+    router.push(`?${params.toString()}`, { scroll: false });
+    onPageChange(nextPage);
+  };
 
   const renderPageNumbers = () => {
     const pages = [];
@@ -31,7 +45,7 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
     return pages.map((page, index) => {
       if (page === "...") {
         return (
-          <span key={`dots-${index}`} className="flex items-center justify-center px-3 py-2 text-slate-500">
+          <span key={`dots-${index}`} className="flex items-center justify-center px-3 py-2 text-[#5F5E5A]">
             <MoreHorizontal className="size-4" />
           </span>
         );
@@ -42,11 +56,11 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
       return (
         <button
           key={`page-${page}`}
-          onClick={() => onPageChange(page as number)}
+          onClick={() => changePage(page as number)}
           className={`flex size-9 items-center justify-center rounded-md text-sm font-medium transition-colors
             ${isCurrentPage 
-              ? "bg-slate-900 text-white" 
-              : "text-slate-600 hover:bg-slate-100"
+              ? "bg-[#185FA5] text-white" 
+              : "border border-[#D3D1C7] bg-white text-[#2C2C2A] hover:bg-[#F1EFE8]"
             }`}
           aria-current={isCurrentPage ? "page" : undefined}
         >
@@ -58,16 +72,16 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
 
   return (
     <nav className="flex items-center justify-center gap-1 sm:justify-between" aria-label="Pagination">
-      <div className="hidden text-sm text-slate-500 sm:block">
-        Page <span className="font-medium text-slate-900">{currentPage}</span> of{" "}
-        <span className="font-medium text-slate-900">{totalPages}</span>
+      <div className="hidden text-sm text-[#5F5E5A] sm:block">
+        Page <span className="font-medium text-[#2C2C2A]">{currentPage}</span> of{" "}
+        <span className="font-medium text-[#2C2C2A]">{totalPages}</span>
       </div>
       
       <div className="flex items-center gap-1">
         <button
-          onClick={() => onPageChange(currentPage - 1)}
+          onClick={() => changePage(currentPage - 1)}
           disabled={currentPage === 1}
-          className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md border border-[#D3D1C7] bg-white px-3 py-2 text-sm font-medium text-[#2C2C2A] transition hover:bg-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Previous page"
         >
           <ChevronLeft className="size-4" />
@@ -79,9 +93,9 @@ export function Pagination({ currentPage, totalPages, onPageChange }: Pagination
         </div>
 
         <button
-          onClick={() => onPageChange(currentPage + 1)}
+          onClick={() => changePage(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="flex items-center gap-1 rounded-md px-3 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-100 disabled:pointer-events-none disabled:opacity-50"
+          className="flex items-center gap-1 rounded-md border border-[#D3D1C7] bg-white px-3 py-2 text-sm font-medium text-[#2C2C2A] transition hover:bg-[#F1EFE8] disabled:cursor-not-allowed disabled:opacity-40"
           aria-label="Next page"
         >
           <span className="hidden sm:inline">Next</span>

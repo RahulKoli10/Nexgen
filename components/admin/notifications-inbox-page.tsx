@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import axios from "axios";
 import { 
   Bell, 
   ShoppingBag, 
@@ -15,12 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   MoreVertical,
-  Search,
-  type LucideIcon
+  Search
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import toast from "react-hot-toast";
-import { queryKeys } from "@/lib/query-keys";
 
 interface Notification {
   id: string;
@@ -32,99 +30,61 @@ interface Notification {
   createdAt: string;
 }
 
-const iconMap: Record<string, LucideIcon> = {
+const iconMap: Record<string, any> = {
   ORDER_PLACED: ShoppingBag,
   ORDER_CONFIRMED: CheckCircle2,
   ORDER_SHIPPED: Package,
   ORDER_DELIVERED: CheckCircle2,
+  ORDER_RETURNED: CheckCircle2,
   ORDER_CANCELLED: XCircle,
   NEW_ORDER: ShoppingBag,
   LOW_STOCK: AlertTriangle,
 };
 
 export function NotificationsInboxPage() {
-  const queryClient = useQueryClient();
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const limit = 20;
 
-  const notificationsQuery = useQuery({
-    queryKey: queryKeys.admin.notifications({ page, limit, unreadOnly: filter === "unread" }),
-    queryFn: async () => {
-      const unreadOnly = filter === "unread" ? "true" : "false";
-      const response = await fetch(`/api/notifications?page=${page}&limit=${limit}&unreadOnly=${unreadOnly}`);
-      if (!response.ok) throw new Error("Failed to load notifications");
-      const data = await response.json();
-      return {
-        notifications: (data.notifications || []) as Notification[],
-        total: Number(data.total || 0),
-      };
-    },
-  });
+  async function loadNotifications() {
+    setIsLoading(true);
+    try {
+      const { data } = await axios.get("/api/notifications", {
+        params: { page, limit, unreadOnly: filter === "unread" },
+      });
+      setNotifications(data.notifications || []);
+      setTotal(data.total || 0);
+    } catch (error) {
+      toast.error("Failed to load notifications");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-  const notifications = notificationsQuery.data?.notifications || [];
-  const total = notificationsQuery.data?.total || 0;
-  const isLoading = notificationsQuery.isLoading;
-
-  const markReadMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await fetch(`/api/notifications/${id}/read`, { method: "PATCH" });
-      return id;
-    },
-    onSuccess: (id) => {
-      queryClient.setQueryData<{ notifications: Notification[]; total: number }>(
-        queryKeys.admin.notifications({ page, limit, unreadOnly: filter === "unread" }),
-        (current) =>
-          current
-            ? {
-                ...current,
-                notifications: current.notifications.map((notification) =>
-                  notification.id === id
-                    ? { ...notification, isRead: true }
-                    : notification
-                ),
-              }
-            : current
-      );
-      void queryClient.invalidateQueries({ queryKey: queryKeys.notifications.unreadCount });
-    },
-    onError: () => {
-      toast.error("Failed to update notification");
-    },
-  });
-
-  const markAllReadMutation = useMutation({
-    mutationFn: async () => {
-      await fetch("/api/notifications/read-all", { method: "PATCH" });
-    },
-    onSuccess: () => {
-      queryClient.setQueryData<{ notifications: Notification[]; total: number }>(
-        queryKeys.admin.notifications({ page, limit, unreadOnly: filter === "unread" }),
-        (current) =>
-          current
-            ? {
-                ...current,
-                notifications: current.notifications.map((notification) => ({
-                  ...notification,
-                  isRead: true,
-                })),
-              }
-            : current
-      );
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-      toast.success("All marked as read");
-    },
-    onError: () => {
-      toast.error("Failed to update notifications");
-    },
-  });
+  useEffect(() => {
+    loadNotifications();
+  }, [page, filter]);
 
   async function markAsRead(id: string) {
-    markReadMutation.mutate(id);
+    try {
+      await axios.patch(`/api/notifications/${id}/read`);
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+    } catch (error) {
+      toast.error("Failed to update notification");
+    }
   }
 
   async function markAllRead() {
-    markAllReadMutation.mutate();
+    try {
+      await axios.patch("/api/notifications/read-all");
+      setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+      toast.success("All marked as read");
+    } catch (error) {
+      toast.error("Failed to update notifications");
+    }
   }
 
   const totalPages = Math.ceil(total / limit);

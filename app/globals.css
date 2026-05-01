@@ -189,7 +189,7 @@ button {
 .eyebrow {
   margin: 0 0 8px;
   color: rgba(78, 104, 97, 0.42);
-  font-size: 0.62rem;
+  font-size: 0.80rem;
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
@@ -377,11 +377,12 @@ button {
 
 .hero-shell {
   display: grid;
-  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
-  gap: 24px;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1.2fr);
+  gap: 40px;
   margin-top: 0;
-  padding: 24px;
+  padding: 40px clamp(24px, 5vw, 80px);
   align-items: center;
+  min-height: 600px;
 }
 
 .hero-copy {
@@ -423,11 +424,11 @@ button {
 .slider {
   position: relative;
   overflow: hidden;
-  min-height: 260px;
-  border-radius: 18px;
+  min-height: 480px;
+  border-radius: 24px;
   border: 1px solid var(--border);
   background: #f5f5f5;
-  box-shadow: 0 24px 54px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 32px 84px rgba(0, 0, 0, 0.12);
 }
 
 .slider-shell {
@@ -448,7 +449,7 @@ button {
   flex: 0 0 100%;
   min-width: 100%;
   display: block;
-  min-height: 260px;
+  min-height: 480px;
 }
 
 .slide-image-wrap,
@@ -458,7 +459,7 @@ button {
 }
 
 .slide-image-only {
-  min-height: 260px;
+  min-height: 480px;
 }
 
 .slide-image,
@@ -3944,6 +3945,12 @@ button {
   .site-footer {
     padding: 14px;
     border-radius: 0;
+  }
+
+  .slider,
+  .slide-link,
+  .slide-image-only {
+    min-height: 320px;
   }
 
   .site-footer {

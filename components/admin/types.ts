@@ -51,7 +51,23 @@ export const orderStatusClass: Record<OrderStatus, string> = {
   CONFIRMED: "bg-blue-100 text-blue-800",
   SHIPPED: "bg-orange-100 text-orange-800",
   DELIVERED: "bg-green-100 text-green-800",
+  RETURN_REQUESTED: "bg-[#FAEEDA] text-[#633806]",
+  RETURNED: "bg-[#F1EFE8] text-[#5F5E5A]",
   CANCELLED: "bg-red-100 text-red-800",
+};
+
+export type SliderImage = {
+  id: string;
+  url: string;
+  publicId: string;
+  alt: string | null;
+  title: string | null;
+  subtitle: string | null;
+  linkUrl: string | null;
+  order: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type AdminUser = {

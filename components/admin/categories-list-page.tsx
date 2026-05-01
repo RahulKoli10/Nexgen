@@ -1,30 +1,39 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { useSearchParams } from "next/navigation";
+import axios from "axios";
 import { Plus, Trash2, Edit2, Loader2, Check, X, AlertCircle } from "lucide-react";
 import type { AdminCategory } from "@/components/admin/types";
 import toast from "react-hot-toast";
 import { SkeletonTable } from "./ui/skeleton-table";
 import { EmptyState } from "./ui/empty-state";
+import { Pagination } from "./ui/pagination";
+import { PAGE_SIZE } from "./constants";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { queryKeys } from "@/lib/query-keys";
 
 const categorySchema = z.object({
   name: z.string().min(1, "Name is required"),
   slug: z.string().min(1, "Slug is required").regex(/^[a-z0-9-]+$/, "Slug must contain only lowercase letters, numbers, and hyphens"),
+  variantFields: z.array(z.string()).default(["Name"]),
 });
 
+type CategoryFormInput = z.input<typeof categorySchema>;
 type CategoryFormValues = z.infer<typeof categorySchema>;
 
 export function CategoriesListPage() {
-  const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [total, setTotal] = useState(0);
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
   const [editSlug, setEditSlug] = useState("");
+  const [editVariantFields, setEditVariantFields] = useState<string[]>([]);
   const editInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -34,11 +43,12 @@ export function CategoriesListPage() {
     reset,
     watch,
     formState: { errors, isSubmitting, isValid },
-  } = useForm<CategoryFormValues>({
+  } = useForm<CategoryFormInput, any, CategoryFormValues>({
     resolver: zodResolver(categorySchema),
     defaultValues: {
       name: "",
       slug: "",
+      variantFields: [],
     },
     mode: "onChange",
   });
@@ -57,95 +67,29 @@ export function CategoriesListPage() {
     setValue("slug", generateSlug(watchName), { shouldValidate: true });
   }, [watchName]);
 
-  const categoriesQuery = useQuery({
-    queryKey: queryKeys.admin.categories,
-    queryFn: async () => {
-      const response = await fetch("/api/admin/categories");
-      if (!response.ok) throw new Error("Failed to load categories");
-      const data = await response.json();
-      return (data.categories ?? []) as AdminCategory[];
-    },
-  });
+  useEffect(() => {
+    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
+  }, [searchParams]);
 
-  const categories = categoriesQuery.data ?? [];
-  const isLoading = categoriesQuery.isLoading;
-
-  const invalidateCategories = () => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.admin.categories });
-  };
-
-  const createCategoryMutation = useMutation({
-    mutationFn: async (data: CategoryFormValues) => {
-      const response = await fetch("/api/admin/categories", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+  async function loadCategories() {
+    try {
+      const { data } = await axios.get("/api/admin/categories", {
+        params: { page, limit: PAGE_SIZE },
       });
+      setCategories(data.categories ?? []);
+      setTotal(data.total ?? 0);
+    } catch (error) {
+      toast.error("Failed to load categories");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to add category");
-      }
-    },
-    onSuccess: () => {
-      toast.success("Category added");
-      reset();
-      invalidateCategories();
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Network error");
-    },
-  });
+  useEffect(() => {
+    loadCategories();
+  }, [page]);
 
-  const updateCategoryMutation = useMutation({
-    mutationFn: async ({
-      id,
-      name,
-      slug,
-    }: {
-      id: string;
-      name: string;
-      slug: string;
-    }) => {
-      const response = await fetch(`/api/admin/categories/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, slug }),
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Update failed");
-      }
-    },
-    onSuccess: () => {
-      toast.success("Category updated");
-      invalidateCategories();
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Network error");
-    },
-  });
-
-  const deleteCategoryMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const response = await fetch(`/api/admin/categories/${id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Delete failed");
-      }
-    },
-    onSuccess: () => {
-      toast.success("Category deleted");
-      invalidateCategories();
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Network error");
-    },
-  });
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
   useEffect(() => {
     if (editingId && editInputRef.current) {
@@ -154,7 +98,19 @@ export function CategoriesListPage() {
   }, [editingId]);
 
   async function onSubmit(data: CategoryFormValues) {
-    await createCategoryMutation.mutateAsync(data);
+    try {
+      await axios.post("/api/admin/categories", data);
+      toast.success("Category added");
+      reset();
+      loadCategories();
+    } catch (error: any) {
+      const message = error.response?.data?.error || "Failed to add category";
+      if (error.response?.status === 500 && error.response?.data?.error?.includes("Unique constraint")) {
+        toast.error("A category with this name/slug already exists.");
+      } else {
+        toast.error(message);
+      }
+    }
   }
 
   async function handleSaveEdit() {
@@ -164,13 +120,24 @@ export function CategoriesListPage() {
     }
 
     const original = categories.find(c => c.id === editingId);
-    if (original && original.name === editName && original.slug === editSlug) {
+    if (original && original.name === editName && original.slug === editSlug && JSON.stringify(original.variantFields) === JSON.stringify(editVariantFields)) {
       setEditingId(null);
       return;
     }
 
-    updateCategoryMutation.mutate({ id: editingId, name: editName, slug: editSlug });
-    setEditingId(null);
+    try {
+      await axios.patch(`/api/admin/categories/${editingId}`, { 
+        name: editName, 
+        slug: editSlug,
+        variantFields: editVariantFields 
+      });
+      toast.success("Category updated");
+      loadCategories();
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || "Failed to update category");
+    } finally {
+      setEditingId(null);
+    }
   }
 
   async function handleDelete(category: AdminCategory) {
@@ -180,13 +147,77 @@ export function CategoriesListPage() {
 
     if (!confirm(`Are you sure you want to delete "${category.name}"?`)) return;
 
-    deleteCategoryMutation.mutate(category.id);
+    try {
+      await axios.delete(`/api/admin/categories/${category.id}`);
+      toast.success("Category deleted");
+      loadCategories();
+    } catch (error) {
+      toast.error("Network error");
+    }
   }
 
   const startEditing = (category: AdminCategory) => {
     setEditingId(category.id);
     setEditName(category.name);
     setEditSlug(category.slug);
+    setEditVariantFields(category.variantFields || []);
+  };
+
+  const VariantFieldManager = ({ 
+    fields, 
+    onChange, 
+    label = "Variant Fields" 
+  }: { 
+    fields: string[], 
+    onChange: (fields: string[]) => void,
+    label?: string 
+  }) => {
+    const [inputValue, setInputValue] = useState("");
+
+    const addField = () => {
+      const val = inputValue.trim();
+      if (val && !fields.includes(val)) {
+        onChange([...fields, val]);
+        setInputValue("");
+      }
+    };
+
+    const removeField = (field: string) => {
+      onChange(fields.filter(f => f !== field));
+    };
+
+    return (
+      <div className="grid gap-1.5 w-full">
+        <label className="text-xs font-bold uppercase tracking-wider text-slate-500">{label}</label>
+        <div className="flex flex-wrap gap-2 p-2 min-h-[40px] rounded-lg border border-slate-200 bg-slate-50/30">
+          {fields.map(field => (
+            <span key={field} className="flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium group">
+              {field}
+              <button 
+                type="button" 
+                onClick={() => removeField(field)}
+                className="hover:text-blue-900 transition"
+              >
+                <X className="size-3" />
+              </button>
+            </span>
+          ))}
+          <input 
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addField();
+              }
+            }}
+            placeholder="Type and press Enter..."
+            className="flex-1 bg-transparent outline-none text-xs min-w-[120px]"
+          />
+        </div>
+        <p className="text-[10px] text-slate-400 italic">Press Enter to add fields like "Size", "Color", etc.</p>
+      </div>
+    );
   };
 
   return (
@@ -220,6 +251,14 @@ export function CategoriesListPage() {
             />
             {errors.slug && <span className="text-xs text-red-500">{errors.slug.message}</span>}
           </div>
+
+          <div className="w-full md:w-[300px]">
+            <VariantFieldManager 
+              fields={watch("variantFields") ?? []} 
+              onChange={(fields) => setValue("variantFields", fields, { shouldValidate: true })} 
+            />
+          </div>
+
           <button
             type="submit"
             disabled={isSubmitting || !isValid}
@@ -238,6 +277,7 @@ export function CategoriesListPage() {
               <tr>
                 <th className="px-6 py-4">Name</th>
                 <th className="px-6 py-4">Slug</th>
+                <th className="px-6 py-4">Variant Fields</th>
                 <th className="px-6 py-4 text-center">Products</th>
                 <th className="px-6 py-4 text-right">Actions</th>
               </tr>
@@ -287,10 +327,27 @@ export function CategoriesListPage() {
                         </div>
                       )}
                     </td>
+                    <td className="px-6 py-4 text-slate-600 font-mono text-xs">{category.slug}</td>
                     <td className="px-6 py-4">
-                      <code className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-600">
-                        {editingId === category.id ? editSlug : category.slug}
-                      </code>
+                      {editingId === category.id ? (
+                        <VariantFieldManager 
+                          fields={editVariantFields}
+                          onChange={setEditVariantFields}
+                          label=""
+                        />
+                      ) : (
+                        <div className="flex flex-wrap gap-1">
+                          {category.variantFields && category.variantFields.length > 0 ? (
+                            category.variantFields.map(f => (
+                              <span key={f} className="px-1.5 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] uppercase tracking-wider font-semibold">
+                                {f}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">Default (Name)</span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-center font-medium text-slate-700">
                       {(category as AdminCategory & { _count?: { products?: number } })._count?.products ?? 0}
@@ -329,6 +386,9 @@ export function CategoriesListPage() {
               )}
             </tbody>
           </table>
+        </div>
+        <div className="border-t border-slate-100 px-6 py-4">
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
         </div>
       </section>
     </div>

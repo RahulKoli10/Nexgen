@@ -1,4 +1,3 @@
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["multiSchema"]
@@ -10,11 +9,249 @@ datasource db {
   schemas  = ["mini_e_commerce"]
 }
 
+model Address {
+  id        String  @id @default(cuid())
+  label     String  @default("Home")
+  fullName  String
+  phone     String
+  line1     String
+  line2     String?
+  city      String
+  state     String
+  pincode   String
+  isDefault Boolean @default(false)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders    Order[]
 
-enum Role {
-  USER
-  ADMIN
-  SELLER
+  @@index([userId])
+  @@schema("mini_e_commerce")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model CartItem {
+  id             String         @id @default(cuid())
+  quantity       Int            @default(1)
+  userId         String
+  variantId      String
+  addedAt        DateTime       @default(now())
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variant        ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, variantId])
+  @@index([userId])
+  @@schema("mini_e_commerce")
+}
+
+model Category {
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  variantFields String[]  @default([])
+  products      Product[]
+
+  @@schema("mini_e_commerce")
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  type      NotifType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean   @default(false)
+  userId    String?
+  orderId   String?
+  createdAt DateTime  @default(now())
+  order     Order?    @relation(fields: [orderId], references: [id])
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, isRead])
+  @@schema("mini_e_commerce")
+}
+
+model Order {
+  id                     String         @id @default(cuid())
+  status                 OrderStatus    @default(PENDING)
+  totalAmount            Int
+  customerName           String
+  customerEmail          String
+  adminNote              String?
+  userId                 String
+  addressId              String
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  paymentMethod          String         @default("CASH_ON_DELIVERY")
+  paymentStatus          String         @default("PENDING")
+  paymentProvider        String?
+  paymentId              String?
+  paymentProviderOrderId String?
+  paidAt                 DateTime?
+  notifications          Notification[]
+  address                Address        @relation(fields: [addressId], references: [id])
+  user                   User           @relation(fields: [userId], references: [id])
+  items                  OrderItem[]
+
+  @@index([createdAt])
+  @@index([customerEmail])
+  @@index([status])
+  @@index([userId])
+  @@schema("mini_e_commerce")
+}
+
+ 
+model OrderItem {
+  id             String         @id @default(cuid())
+  quantity       Int
+  productName    String
+  variantName    String
+  priceAtOrder   Int
+  orderId        String
+  variantId      String
+  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  variant        ProductVariant @relation(fields: [variantId], references: [id])
+
+  @@index([orderId])
+  @@schema("mini_e_commerce")
+}
+
+model Product {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  brand          String?
+  slug           String           @unique
+  isActive       Boolean          @default(true)
+  categoryId     String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  category       Category         @relation(fields: [categoryId], references: [id])
+  images         ProductImage[]
+  variants       ProductVariant[]
+  reviews        Review[]
+  wishlists      Wishlist[]
+
+  @@index([categoryId])
+  @@index([isActive])
+  @@index([slug])
+  @@schema("mini_e_commerce")
+}
+
+model ProductImage {
+  id        String  @id @default(cuid())
+  url       String
+  publicId  String?
+  altText   String?
+  isPrimary Boolean @default(false)
+  sortOrder Int     @default(0)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@schema("mini_e_commerce")
+}
+
+model ProductVariant {
+  id        String      @id @default(cuid())
+  name      String
+  sku       String      @unique
+  price     Int
+  stock     Int         @default(0)
+  productId String
+  cartItems CartItem[]
+  orderItems OrderItem[]
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([stock])
+  @@schema("mini_e_commerce")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model Review {
+  id        String   @id @default(cuid())
+  rating    Int
+  comment   String?
+  userId    String
+  productId String
+  createdAt DateTime @default(now())
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@schema("mini_e_commerce")
+}
+
+model User {
+  id                String         @id @default(cuid())
+  name              String
+  email             String         @unique
+  password          String?
+  role              Role           @default(USER)
+  isVerified        Boolean        @default(false)
+  verificationToken String?        @unique
+  resetToken        String?
+  resetTokenExpiry  DateTime?
+  image             String?
+  phone             String?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  isBanned          Boolean        @default(false)
+  address           String?
+  addresses         Address[]
+  cartItems         CartItem[]
+  notifications     Notification[]
+  orders            Order[]
+  reviews           Review[]
+  wishlists         Wishlist[]
+
+  @@index([email])
+  @@index([role])
+  @@schema("mini_e_commerce")
+}
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  addedAt   DateTime @default(now())
+  userId    String
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@index([productId])
+  @@index([userId])
+  @@schema("mini_e_commerce")
+}
+model SliderImage {
+  id        String   @id @default(cuid())
+  url       String   // Cloudinary URL
+  publicId  String   // Cloudinary public_id — needed to delete from Cloudinary
+  alt       String?  // SEO alt text
+  title     String?  // optional overlay heading on the slide
+  subtitle  String?  // optional overlay subtext
+  linkUrl   String?  // clicking the slide goes here e.g. /products?category=sale
+  order     Int      @default(0)   // drag-to-reorder position
+  active    Boolean  @default(true) // admin can disable without deleting
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([active])
+  @@index([order])
+  @@schema("mini_e_commerce")
+}
+enum NotifType {
+  ORDER_PLACED
+  ORDER_CONFIRMED
+  ORDER_SHIPPED
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+  NEW_ORDER
+  LOW_STOCK
+  ORDER_RETURN_REQUESTED
+  ORDER_RETURNED
 
   @@schema("mini_e_commerce")
 }
@@ -25,279 +262,15 @@ enum OrderStatus {
   SHIPPED
   DELIVERED
   CANCELLED
+  RETURN_REQUESTED
+  RETURNED
 
   @@schema("mini_e_commerce")
 }
 
-enum NotifType {
-  ORDER_PLACED      
-  ORDER_CONFIRMED    
-  ORDER_SHIPPED      
-  ORDER_DELIVERED    
-  ORDER_CANCELLED    
-  NEW_ORDER          
-  LOW_STOCK          
-
-  @@schema("mini_e_commerce")
-}
-
-// ─── User & Auth ─────────────────────────────────────────────
-
-model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  phone        String?
-  password     String?  
-  role         Role     @default(USER)
-  isBanned     Boolean  @default(false)
-  image        String?
-
-  isVerified        Boolean   @default(false)
-  verificationToken String?   @unique
-  resetToken        String?
-  resetTokenExpiry  DateTime?
-  address           String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // relations
-  addresses     Address[]
-  cartItems     CartItem[]
-  orders        Order[]
-  reviews       Review[]
-  notifications Notification[]
-   wishlistItems Wishlist[]  
-
-  @@index([email])   
-  @@index([role])    
-  @@schema("mini_e_commerce")
-}
-
-model Address {
-  id        String  @id @default(cuid())
-  label     String  @default("Home")  // "Home", "Office", "Other"
-  fullName  String
-  phone     String
-  line1     String
-  line2     String? 
-  city      String
-  state     String
-  pincode   String
-  isDefault Boolean @default(false)
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  orders Order[] // orders placed using this address
-
-  @@index([userId])
-  @@schema("mini_e_commerce")
-}
-
-// ─── Catalog
-
-model Category {
-  id   String @id @default(cuid())
-  name String
-  slug String @unique // URL-safe: "mechanical-keyboards", "desk-mats"
-
-  products Product[]
-
-  @@schema("mini_e_commerce")
-}
-
-model Product {
-  id          String  @id @default(cuid())
-  name        String
-  description String?
-  brand       String?
-  slug        String  @unique 
-  isActive    Boolean @default(true) 
-
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  variants ProductVariant[]
-  images   ProductImage[]
-  reviews  Review[]
-  wishlistedBy Wishlist[]  // Added Wishlist model
-
-  @@index([categoryId])
-  @@index([isActive])
-  @@index([slug])
-  @@schema("mini_e_commerce")
-}
-
-model ProductVariant {
-  id    String @id @default(cuid())
-  name  String // e.g. "Space Grey / Blue Switch"
-  sku   String @unique
-  price Int    // stored in PAISE — ₹1,299 = 129900
-  stock Int    @default(0)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  cartItems  CartItem[]
-  orderItems OrderItem[]
-
-  @@index([productId])
-  @@index([stock])
-  @@schema("mini_e_commerce")
-}
-
-model ProductImage {
-  id        String  @id @default(cuid())
-  url       String
-  altText   String? 
-  isPrimary Boolean @default(false) // shown on product card
-  sortOrder Int     @default(0)     // gallery order
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([productId])
-  @@schema("mini_e_commerce")
-}
-
-// Product reviews (one per user per product)
-model Review {
-  id        String   @id @default(cuid())
-  rating    Int     
-  comment   String?
-  createdAt DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId]) 
-  @@index([productId])
-  @@schema("mini_e_commerce")
-}
-
-// ─── Cart ─────────────────────────────────────────────────────
-
-model CartItem {
-  id       String   @id @default(cuid())
-  quantity Int      @default(1) 
-  addedAt  DateTime @default(now())
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  variantId String
-  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, variantId]) // no duplicate rows — increment qty instead of inserting
-  @@index([userId])
-  @@schema("mini_e_commerce")
-}
-
-// ─── Orders ───────────────────────────────────────────────────
-
-model Order {
-  id          String      @id @default(cuid())
-  status      OrderStatus @default(PENDING)
-  totalAmount Int         // stored in PAISE, sum of all OrderItems
-
-  // Customer snapshot — denormalized so order stays correct even if user edits profile
-  customerName  String
-  customerEmail String
-
-  adminNote String? // internal note visible only to admin, never to customer
-
-  paymentMethod          String   @default("CASH_ON_DELIVERY")
-  paymentStatus          String   @default("PENDING")
-  paymentProvider        String?
-  paymentId              String?
-  paymentProviderOrderId String?
-  paidAt                 DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  userId String
-  user   User   @relation(fields: [userId], references: [id])
-
-  // Address snapshot via relation — address is locked at order time
-  addressId String
-  address   Address @relation(fields: [addressId], references: [id])
-
-  items         OrderItem[]
-  notifications Notification[]
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt]) // fast date-range queries for admin dashboard
-  @@index([customerEmail]) // fast search by email
-  @@schema("mini_e_commerce")
-}
-
-model OrderItem {
-  id       String @id @default(cuid())
-  quantity Int
-
-  // SNAPSHOTS — never change even if product is edited or deleted later
-  productName  String // e.g. "Keychron K2 Pro"
-  variantName  String // e.g. "Space Grey / Red Switch"
-  priceAtOrder Int    // price in PAISE at the moment of purchase
-
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  variantId String
-  variant   ProductVariant @relation(fields: [variantId], references: [id])
-  // NOTE: no onDelete Cascade here — we want to KEEP order history
-  // even if the variant is later deleted from the catalog
-
-  @@index([orderId])
-  @@schema("mini_e_commerce")
-}
-
-// ─── Notifications ────────────────────────────────────────────
-
-model Notification {
-  id        String    @id @default(cuid())
-  type      NotifType
-  title     String    // short: "Order confirmed"
-  message   String    // full: "Your order #abc123 has been confirmed and is being prepared."
-  link      String?   // deep link: "/orders/clx123" or "/admin/orders/clx123"
-  isRead    Boolean   @default(false)
-  createdAt DateTime  @default(now())
-
-  // nullable userId → future support for broadcast/system notifications
-  userId String?
-  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // optional orderId → link notification to a specific order for quick navigation
-  orderId String?
-  order   Order? @relation(fields: [orderId], references: [id], onDelete: SetNull)
-
-  @@index([userId, isRead]) // THE most important index — powers the bell unread count
-  @@index([userId, createdAt]) // fast notification inbox sorted by date
-  @@schema("mini_e_commerce")
-}
-
-model Wishlist {
-  id      String   @id @default(cuid())
-  addedAt DateTime @default(now())
-
-  userId String
-  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, productId])
-  @@index([userId])
-  @@index([productId])
+enum Role {
+  USER
+  ADMIN
+  SELLER
   @@schema("mini_e_commerce")
 }

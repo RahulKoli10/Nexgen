@@ -13,14 +13,16 @@ const typeMap: Record<OrderStatus, NotifType> = {
   CONFIRMED: "ORDER_CONFIRMED",
   SHIPPED: "ORDER_SHIPPED",
   DELIVERED: "ORDER_DELIVERED",
+  RETURN_REQUESTED: "ORDER_DELIVERED",
+  RETURNED: "ORDER_RETURNED",
   CANCELLED: "ORDER_CANCELLED",
 };
 
 export async function PATCH(request: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== "ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const { id } = await context.params;

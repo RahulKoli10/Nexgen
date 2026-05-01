@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import axios from "axios";
 import { X, Mail, Calendar, Hash, IndianRupee, Clock } from "lucide-react";
 import { 
   formatCurrency, 
@@ -9,7 +10,6 @@ import {
   roleStatusClass, 
   type UserSummary 
 } from "@/components/admin/types";
-import { queryKeys } from "@/lib/query-keys";
 
 interface UserDetailDrawerProps {
   userId: string | null;
@@ -17,46 +17,42 @@ interface UserDetailDrawerProps {
 }
 
 export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
-  const summaryQuery = useQuery({
-    queryKey: queryKeys.admin.userSummary(userId),
-    enabled: Boolean(userId),
-    queryFn: async () => {
-      if (!userId) return null;
-      const params = new URLSearchParams({ id: userId });
-      const response = await fetch(`/api/admin/users/summary?${params.toString()}`, {
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-        redirect: "manual",
-      });
-      const contentType = response.headers.get("content-type") ?? "";
+  const [summary, setSummary] = useState<UserSummary | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-      if (!contentType.includes("application/json")) {
-        const body = await response.text();
-        console.error("User summary returned non-JSON:", {
-          status: response.status,
-          url: response.url,
-          contentType,
-          body: body.slice(0, 300),
+  useEffect(() => {
+    if (!userId) {
+       (null);
+      setError(null);
+      return;
+    }
+
+    const selectedUserId = userId;
+
+    async function loadSummary() {
+      setIsLoading(true);
+      setSummary(null);
+      setError(null);
+      try {
+        const { data } = await axios.get("/api/admin/users/summary", {
+          params: { id: selectedUserId },
+          headers: { Accept: "application/json" },
         });
-        throw new Error("User details API returned a page instead of JSON.");
+
+        if (data.summary) {
+          setSummary(data.summary);
+        }
+      } catch (error) {
+        console.error("Failed to load user summary.");
+        setError(error instanceof Error ? error.message : "Failed to load user summary.");
+      } finally {
+        setIsLoading(false);
       }
+    }
 
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to load user summary.");
-      }
-
-      return (data.summary ?? null) as UserSummary | null;
-    },
-  });
-
-  const summary = summaryQuery.data ?? null;
-  const error = summaryQuery.error
-    ? summaryQuery.error instanceof Error
-      ? summaryQuery.error.message
-      : "Failed to load user summary."
-    : null;
-  const isLoading = summaryQuery.isLoading || summaryQuery.isFetching;
+    loadSummary();
+  }, [userId]);
 
   if (!userId) return null;
 

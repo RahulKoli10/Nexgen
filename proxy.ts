@@ -15,6 +15,17 @@ export async function proxy(request: NextRequest) {
 		}
 	}
 
+	if (pathname.startsWith("/api/admin")) {
+		const token = await getToken({
+			req: request,
+			secret: process.env.NEXTAUTH_SECRET,
+		});
+
+		if (!token || token.role !== "ADMIN") {
+			return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+		}
+	}
+
 	if (pathname === "/admin/login") {
 		const token = await getToken({
 			req: request,
@@ -30,5 +41,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-	matcher: ["/admin/:path*"],
+	matcher: ["/admin/:path*", "/api/admin/:path*"],
 };

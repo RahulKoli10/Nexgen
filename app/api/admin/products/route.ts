@@ -2,6 +2,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { PAGE_SIZE } from "@/components/admin/constants";
 
 type ProductImageInput = {
   url: string;
@@ -31,12 +34,17 @@ type ProductRequestBody = {
 
 export async function GET(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const params = request.nextUrl.searchParams;
     const search = params.get("search")?.trim() || "";
     const categoryId = params.get("category") || "";
     const activeParam = params.get("active");
     const page = Math.max(1, Number(params.get("page") ?? 1));
-    const limit = Math.max(1, Number(params.get("limit") ?? 20));
+    const limit = Math.max(1, Number(params.get("limit") ?? PAGE_SIZE));
 
     const where: Prisma.ProductWhereInput = {};
     if (search) {
@@ -51,7 +59,7 @@ export async function GET(request: NextRequest) {
       where.isActive = false;
     }
 
-    const [products, total, categories] = await Promise.all([
+    const [products, total] = await prisma.$transaction([
       prisma.product.findMany({
         where,
         include: {
@@ -64,8 +72,8 @@ export async function GET(request: NextRequest) {
         take: limit,
       }),
       prisma.product.count({ where }),
-      prisma.category.findMany({ orderBy: { name: "asc" } }),
     ]);
+    const categories = await prisma.category.findMany({ orderBy: { name: "asc" } });
 
     const formattedProducts = products.map((p) => ({
       ...p,
@@ -100,6 +108,11 @@ function generateSlug(name: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    if (session?.user?.role !== "ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
     const body = (await request.json()) as ProductRequestBody;
     
     const baseSlug = generateSlug(body.name);

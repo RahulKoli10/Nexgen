@@ -1,4 +1,8 @@
-import { getOrdersByUserId as getOrdersByUserIdService, cancelOrderById as cancelOrderByIdService } from "@/services/order.service";
+import {
+  getOrdersByUserId as getOrdersByUserIdService,
+  cancelOrderById as cancelOrderByIdService,
+  requestReturnById as requestReturnByIdService,
+} from "@/services/order.service";
 import { sendEmail } from "@/lib/email";
 import { prisma } from "@/lib/prisma";
 
@@ -184,6 +188,10 @@ export const cancelOrderById = async (orderId: string, userId: string) => {
   console.log(`Order ${order.id} cancelled successfully`);
 
   return order;
+};
+
+export const requestReturnById = async (orderId: string, userId: string) => {
+  return requestReturnByIdService(orderId, userId);
 };
 
 

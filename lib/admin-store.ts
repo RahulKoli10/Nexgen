@@ -1,4 +1,4 @@
-export type OrderStatus = "PENDING" | "CONFIRMED" | "SHIPPED" | "DELIVERED" | "CANCELLED";
+export type OrderStatus = "PENDING" | "CONFIRMED" | "SHIPPED" | "DELIVERED" | "RETURN_REQUESTED" | "RETURNED" | "CANCELLED";
 
 export type AdminOrder = {
   id: string;
@@ -39,11 +39,14 @@ export type AdminCategory = {
   id: string;
   name: string;
   slug: string;
+  variantFields: string[];
 };
 
 export type AdminProductImage = {
   id: string;
   url: string;
+  publicId?: string | null;
+  altText?: string | null;
   isPrimary: boolean;
   sortOrder: number;
 };
@@ -179,7 +182,9 @@ export function getValidNextStatuses(status: OrderStatus): OrderStatus[] {
     PENDING: ["CONFIRMED", "CANCELLED"],
     CONFIRMED: ["SHIPPED", "CANCELLED"],
     SHIPPED: ["DELIVERED", "CANCELLED"],
-    DELIVERED: [],
+    DELIVERED: ["RETURN_REQUESTED"],
+    RETURN_REQUESTED: ["RETURNED"],
+    RETURNED: [],
     CANCELLED: [],
   };
 
@@ -321,6 +326,8 @@ export function saveProduct(payload: ProductPayload, id?: string) {
     images: payload.images.map((image, index) => ({
       id: image.id ?? uid("img"),
       url: image.url,
+      publicId: image.publicId,
+      altText: image.altText,
       isPrimary: image.isPrimary,
       sortOrder: index,
     })),
@@ -376,7 +383,7 @@ export function duplicateProduct(id: string) {
     description: product.description,
     categoryId: product.categoryId,
     isActive: false,
-    images: product.images.map(({ url, isPrimary, sortOrder }) => ({ url, isPrimary, sortOrder })),
+    images: product.images.map(({ url, publicId, altText, isPrimary, sortOrder }) => ({ url, publicId, altText, isPrimary, sortOrder })),
     variants: product.variants.map((variant) => ({
       name: variant.name,
       price: variant.price,

@@ -1,6 +1,6 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
-import { getOrdersByUserId, cancelOrderById } from "@/controllers/order.controller";
+import { getOrdersByUserId, cancelOrderById, requestReturnById } from "@/controllers/order.controller";
 
 export async function GET() {
   try {
@@ -24,6 +24,10 @@ export async function POST(req: Request) {
     const { orderId, action } = await req.json();
     if (action === "cancel") {
       const result = await cancelOrderById(orderId, session.user.id);
+      return Response.json(result);
+    }
+    if (action === "return") {
+      const result = await requestReturnById(orderId, session.user.id);
       return Response.json(result);
     }
     return Response.json({ error: "Invalid action" }, { status: 400 });

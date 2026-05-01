@@ -1,48 +1,32 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import axios from "axios";
 import { Bell } from "lucide-react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import useSWR from "swr";
 import { NotificationsDropdown } from "./notifications-dropdown";
-import { queryKeys } from "@/lib/query-keys";
 
-const fetcher = (url: string) => fetch(url).then((res) => res.json());
+const fetcher = (url: string) => axios.get(url).then((res) => res.data);
 
 export function NotificationsBell() {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const queryClient = useQueryClient();
 
-  const countQuery = useQuery({
-    queryKey: queryKeys.notifications.unreadCount,
-    queryFn: () => fetcher("/api/notifications/unread-count"),
-    refetchInterval: 30000,
-  });
+  // Poll unread count every 30 seconds
+  const { data: countData, mutate: mutateCount } = useSWR(
+    "/api/notifications/unread-count",
+    fetcher,
+    { refreshInterval: 30000 }
+  );
 
-  const listQuery = useQuery({
-    queryKey: queryKeys.notifications.list(10),
-    queryFn: () => fetcher("/api/notifications?limit=10"),
-  });
+  // Fetch last 10 notifications
+  const { data: listData, mutate: mutateList } = useSWR(
+    "/api/notifications?limit=10",
+    fetcher
+  );
 
-  const unreadCount = countQuery.data?.count ?? 0;
-  const notifications = listQuery.data?.notifications ?? [];
-
-  const invalidateNotifications = () => {
-    void queryClient.invalidateQueries({
-      queryKey: ["notifications"],
-    });
-  };
-
-  const markReadMutation = useMutation({
-    mutationFn: (id: string) =>
-      fetch(`/api/notifications/${id}/read`, { method: "PATCH" }),
-    onSuccess: invalidateNotifications,
-  });
-
-  const markAllReadMutation = useMutation({
-    mutationFn: () => fetch("/api/notifications/read-all", { method: "PATCH" }),
-    onSuccess: invalidateNotifications,
-  });
+  const unreadCount = countData?.count ?? 0;
+  const notifications = listData?.notifications ?? [];
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -55,11 +39,23 @@ export function NotificationsBell() {
   }, []);
 
   async function handleMarkRead(id: string) {
-    markReadMutation.mutate(id);
+    try {
+      await axios.patch(`/api/notifications/${id}/read`);
+      mutateCount();
+      mutateList();
+    } catch (error) {
+      console.error("Failed to mark notification as read:", error);
+    }
   }
 
   async function handleMarkAllRead() {
-    markAllReadMutation.mutate();
+    try {
+      await axios.patch("/api/notifications/read-all");
+      mutateCount();
+      mutateList();
+    } catch (error) {
+      console.error("Failed to mark all notifications as read:", error);
+    }
   }
 
   return (

@@ -15,11 +15,11 @@ export async function PATCH(
 
     const { id } = await context.params;
     const body = await request.json();
-    const { name, slug } = body;
+    const { name, slug, variantFields } = body;
 
     const category = await prisma.category.update({
       where: { id },
-      data: { name, slug },
+      data: { name, slug, variantFields },
     });
 
     return NextResponse.json({ category });

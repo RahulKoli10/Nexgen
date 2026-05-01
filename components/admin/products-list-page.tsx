@@ -3,7 +3,8 @@
   import Image from "next/image";
   import Link from "next/link";
   import { useEffect, useMemo, useState } from "react";
-  import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+  import { useSearchParams } from "next/navigation";
+  import axios from "axios";
   import { Copy, Edit, PackagePlus, Box } from "lucide-react";
   import toast from "react-hot-toast";
   import type { AdminCategory, AdminProduct, ProductListResponse } from "@/components/admin/types";
@@ -11,17 +12,19 @@
   import { SkeletonTable } from "./ui/skeleton-table";
   import { EmptyState } from "./ui/empty-state";
   import { Pagination } from "./ui/pagination";
-  import { queryKeys } from "@/lib/query-keys";
-
-  const pageSize = 20;
+  import { PAGE_SIZE } from "./constants";
 
   export function ProductsListPage() {
-    const queryClient = useQueryClient();
+    const searchParams = useSearchParams();
+    const [products, setProducts] = useState<AdminProduct[]>([]);
+    const [categories, setCategories] = useState<AdminCategory[]>([]);
     const [searchInput, setSearchInput] = useState("");
     const [search, setSearch] = useState("");
     const [category, setCategory] = useState("");
     const [active, setActive] = useState("");
-    const [page, setPage] = useState(1);
+    const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+    const [total, setTotal] = useState(0);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
       const timer = window.setTimeout(() => {
@@ -31,130 +34,56 @@
       return () => window.clearTimeout(timer);
     }, [searchInput]);
 
-    const productsQueryParams = {
-      search,
-      category,
-      active,
-      page,
-      limit: pageSize,
-    };
+    useEffect(() => {
+      setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
+    }, [searchParams]);
 
-    const productsQuery = useQuery({
-      queryKey: queryKeys.admin.products(productsQueryParams),
-      queryFn: async () => {
-        const params = new URLSearchParams({
-          search,
-          category,
-          active,
-          page: String(page),
-          limit: String(pageSize),
-        });
-        const response = await fetch(`/api/admin/products?${params.toString()}`);
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({ error: "Failed to load products" }));
-          throw new Error(err.error || "Failed to load products");
+    useEffect(() => {
+      async function loadProducts() {
+        try {
+          setLoading(true);
+          const { data } = await axios.get<ProductListResponse>("/api/admin/products", {
+            params: { search, category, active, page, limit: PAGE_SIZE },
+          });
+          setProducts(data.products);
+          setCategories(data.categories);
+          setTotal(data.total);
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : "Failed to load products");
+        } finally {
+          setLoading(false);
         }
-        const data = (await response.json()) as ProductListResponse;
-        return data;
-      },
-      placeholderData: (previousData) => previousData,
-    });
+      }
 
-    const products = productsQuery.data?.products ?? [];
-    const categories = productsQuery.data?.categories ?? [];
-    const total = productsQuery.data?.total ?? 0;
-    const loading = productsQuery.isLoading || productsQuery.isFetching;
+      loadProducts();
+    }, [active, category, page, search]);
 
-    const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total]);
-
-    const toggleActiveMutation = useMutation({
-      mutationFn: async ({
-        product,
-        isActive,
-      }: {
-        product: AdminProduct;
-        isActive: boolean;
-      }) => {
-        const response = await fetch(`/api/admin/products/${product.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ isActive }),
-        });
-
-        if (!response.ok) throw new Error("Unable to update product.");
-      },
-      onMutate: async ({ product, isActive }) => {
-        await queryClient.cancelQueries({
-          queryKey: queryKeys.admin.products(productsQueryParams),
-        });
-        const previousData = queryClient.getQueryData<ProductListResponse>(
-          queryKeys.admin.products(productsQueryParams)
-        );
-
-        queryClient.setQueryData<ProductListResponse>(
-          queryKeys.admin.products(productsQueryParams),
-          (current) =>
-            current
-              ? {
-                  ...current,
-                  products: current.products.map((item) =>
-                    item.id === product.id ? { ...item, isActive } : item
-                  ),
-                }
-              : current
-        );
-
-        return { previousData };
-      },
-      onError: (error, _variables, context) => {
-        queryClient.setQueryData(
-          queryKeys.admin.products(productsQueryParams),
-          context?.previousData
-        );
-        toast.error(error instanceof Error ? error.message : "Unable to update product.");
-      },
-      onSettled: () => {
-        void queryClient.invalidateQueries({
-          queryKey: queryKeys.admin.products(productsQueryParams),
-        });
-      },
-    });
-
-    const duplicateProductMutation = useMutation({
-      mutationFn: async (product: AdminProduct) => {
-        const response = await fetch(`/api/admin/products/${product.id}/duplicate`, { method: "POST" });
-
-        if (!response.ok) {
-          throw new Error("Could not duplicate product.");
-        }
-
-        return response.json() as Promise<{ product: AdminProduct }>;
-      },
-      onSuccess: (data) => {
-        queryClient.setQueryData<ProductListResponse>(
-          queryKeys.admin.products(productsQueryParams),
-          (current) =>
-            current
-              ? {
-                  ...current,
-                  products: [data.product, ...current.products].slice(0, pageSize),
-                  total: current.total + 1,
-                }
-              : current
-        );
-        toast.success("Product duplicated.");
-      },
-      onError: (error) => {
-        toast.error(error instanceof Error ? error.message : "Could not duplicate product.");
-      },
-    });
+    const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
 
     async function toggleActive(product: AdminProduct, isActive: boolean) {
-      toggleActiveMutation.mutate({ product, isActive });
+      setProducts((current) =>
+        current.map((item) => (item.id === product.id ? { ...item, isActive } : item))
+      );
+
+      try {
+        await axios.patch(`/api/admin/products/${product.id}`, { isActive });
+      } catch (error) {
+        setProducts((current) =>
+          current.map((item) => (item.id === product.id ? { ...item, isActive: product.isActive } : item))
+        );
+        toast.error(error instanceof Error ? error.message : "Unable to update product.");
+      }
     }
 
     async function duplicateProduct(product: AdminProduct) {
-      duplicateProductMutation.mutate(product);
+      try {
+        const { data } = await axios.post(`/api/admin/products/${product.id}/duplicate`);
+        setProducts((current) => [data.product, ...current].slice(0, PAGE_SIZE));
+        setTotal((current) => current + 1);
+        toast.success("Product duplicated.");
+      } catch {
+        toast.error("Could not duplicate product.");
+      }
     }
 
     return (
@@ -309,22 +238,7 @@
               Page {page} of {totalPages} · {total} products
             </span>
             <div className="flex items-center gap-2">
-              <button
-                type="button"
-                disabled={page === 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-                className="h-9 rounded-md border border-slate-200 px-3 font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                disabled={page === totalPages}
-                onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-                className="h-9 rounded-md border border-slate-200 px-3 font-medium text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Next
-              </button>
+              <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
             </div>
           </div>
         </section>

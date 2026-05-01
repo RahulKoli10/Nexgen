@@ -1,15 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import { Check, Save } from "lucide-react";
 import toast from "react-hot-toast";
 import type { AdminOrder, OrderStatus } from "@/components/admin/types";
 import { formatCurrency, formatShortDate, orderStatusClass } from "@/components/admin/types";
-import { queryKeys } from "@/lib/query-keys";
 
-const timelineSteps: Array<{ label: string; status: Exclude<OrderStatus, "CANCELLED"> }> = [
+const timelineSteps: Array<{ label: string; status: Exclude<OrderStatus, "CANCELLED" | "RETURN_REQUESTED" | "RETURNED"> }> = [
   { label: "Placed", status: "PENDING" },
   { label: "Confirmed", status: "CONFIRMED" },
   { label: "Shipped", status: "SHIPPED" },
@@ -21,6 +20,8 @@ const stepIndexByStatus: Record<OrderStatus, number> = {
   CONFIRMED: 1,
   SHIPPED: 2,
   DELIVERED: 3,
+  RETURN_REQUESTED: 3,
+  RETURNED: 3,
   CANCELLED: -1,
 };
 
@@ -33,82 +34,63 @@ function paymentStatusLabel(status?: string) {
 }
 
 export function OrderDetailPage({ orderId }: { orderId: string }) {
-  const queryClient = useQueryClient();
+  const [order, setOrder] = useState<AdminOrder | null>(null);
+  const [validNextStatuses, setValidNextStatuses] = useState<OrderStatus[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<OrderStatus | "">("");
   const [note, setNote] = useState("");
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isSavingNote, setIsSavingNote] = useState(false);
 
-  const orderQuery = useQuery({
-    queryKey: queryKeys.admin.order(orderId),
-    queryFn: async () => {
-      const response = await fetch(`/api/admin/orders/${orderId}`);
-      if (!response.ok) {
-        throw new Error("Order not found.");
-      }
-      const data = await response.json();
-      setSelectedStatus("");
-      setNote(data.order.adminNote ?? "");
-      return {
-        order: data.order as AdminOrder,
-        validNextStatuses: (data.validNextStatuses ?? []) as OrderStatus[],
-      };
-    },
-  });
+  useEffect(() => {
+    let isMounted = true;
 
-  const order = orderQuery.data?.order ?? null;
-  const validNextStatuses = orderQuery.data?.validNextStatuses ?? [];
-
-  const updateStatusMutation = useMutation({
-    mutationFn: async (status: OrderStatus) => {
-      const response = await fetch(`/api/admin/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+    axios.get(`/api/admin/orders/${orderId}`)
+      .then(({ data }) => {
+        if (!isMounted) return;
+        setOrder(data.order);
+        setValidNextStatuses(data.validNextStatuses ?? []);
+        setSelectedStatus("");
+        setNote(data.order.adminNote ?? "");
+      })
+      .catch((error) => {
+        if (isMounted) {
+          toast.error(error instanceof Error ? error.message : "Order not found.");
+        }
       });
 
-      if (!response.ok) throw new Error("Unable to update order status.");
-      const data = await response.json();
-      return data.order as AdminOrder;
-    },
-    onSuccess: (updatedOrder) => {
-      queryClient.setQueryData(queryKeys.admin.order(orderId), {
-        order: updatedOrder,
-        validNextStatuses: nextStatuses(updatedOrder.status),
-      });
-      setSelectedStatus("");
-      toast.success("Order status updated.");
-    },
-    onError: () => {
-      toast.error("Unable to update order status.");
-    },
-  });
-
-  const saveNoteMutation = useMutation({
-    mutationFn: async () => {
-      const response = await fetch(`/api/admin/orders/${orderId}/note`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ note }),
-      });
-
-      if (!response.ok) throw new Error("Unable to save note.");
-    },
-    onSuccess: () => {
-      toast.success("Internal note saved.");
-    },
-    onError: () => {
-      toast.error("Unable to save note.");
-    },
-  });
+    return () => {
+      isMounted = false;
+    };
+  }, [orderId]);
 
   const completedIndex = useMemo(() => (order ? stepIndexByStatus[order.status] : -1), [order]);
 
   async function updateStatus() {
     if (!selectedStatus) return;
-    updateStatusMutation.mutate(selectedStatus);
+    setIsUpdating(true);
+    try {
+      const { data } = await axios.patch(`/api/admin/orders/${orderId}/status`, { status: selectedStatus });
+      setOrder(data.order);
+      setValidNextStatuses(data.order ? nextStatuses(data.order.status) : []);
+      setSelectedStatus("");
+      toast.success("Order status updated.");
+    } catch {
+      toast.error("Unable to update order status.");
+    } finally {
+      setIsUpdating(false);
+    }
   }
 
   async function saveNote() {
-    saveNoteMutation.mutate();
+    setIsSavingNote(true);
+    try {
+      await axios.patch(`/api/admin/orders/${orderId}/note`, { note });
+      toast.success("Internal note saved.");
+    } catch {
+      toast.error("Unable to save note.");
+    } finally {
+      setIsSavingNote(false);
+    }
   }
 
   if (!order) {
@@ -277,11 +259,11 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
               </select>
               <button
                 type="button"
-                disabled={!selectedStatus || updateStatusMutation.isPending}
+                disabled={!selectedStatus || isUpdating}
                 onClick={updateStatus}
                 className="inline-flex h-10 items-center rounded-md bg-slate-900 px-4 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {updateStatusMutation.isPending ? "Updating..." : "Update Status"}
+                {isUpdating ? "Updating..." : "Update Status"}
               </button>
             </div>
           ) : (
@@ -292,7 +274,7 @@ export function OrderDetailPage({ orderId }: { orderId: string }) {
         <div className="rounded-md border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between gap-4">
             <h2 className="text-lg font-semibold text-slate-950">Internal Notes</h2>
-            {saveNoteMutation.isPending ? <span className="text-xs font-medium text-slate-500">Saving...</span> : null}
+            {isSavingNote ? <span className="text-xs font-medium text-slate-500">Saving...</span> : null}
           </div>
           <textarea
             value={note}
@@ -318,6 +300,8 @@ function nextStatuses(status: OrderStatus): OrderStatus[] {
     CONFIRMED: ["SHIPPED", "CANCELLED"],
     SHIPPED: ["DELIVERED", "CANCELLED"],
     DELIVERED: [],
+    RETURN_REQUESTED: ["RETURNED"],
+    RETURNED: [],
     CANCELLED: [],
   };
 

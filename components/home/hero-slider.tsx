@@ -1,77 +1,63 @@
 "use client";
 
-
 import Image from "next/image";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import axios from "axios";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { CtaButton } from "@/components/home/cta-button";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
- 
-import { useQuery } from "@tanstack/react-query";
-import { queryKeys } from "@/lib/query-keys";
- 
-type SliderProduct = {
+
+type SliderImage = {
   id: string;
-  name: string;
-  slug: string;
-  description?: string | null;
-  images?: { url?: string | null }[];
+  url: string;
+  alt?: string | null;
+  title?: string | null;
+  subtitle?: string | null;
+  linkUrl?: string | null;
 };
 
-export function HeroSlider() {
+export function HeroSlider({ slides: initialSlides }: { slides?: SliderImage[] }) {
+  const [slides, setSlides] = useState<SliderImage[]>(initialSlides || []);
   const [activeIndex, setActiveIndex] = useState(0);
-  const router = useRouter();
+  const [isLoading, setIsLoading] = useState(!initialSlides);
 
-  const { data: products = [], isLoading: loading } = useQuery({
-    queryKey: queryKeys.product.random,
-    queryFn: async () => {
-      const res = await fetch("/api/product/random");
-      if (!res.ok) return [];
-      const data = await res.json();
-      return Array.isArray(data) ? (data as SliderProduct[]) : [];
-    },
-  });
-
-  const activeSlideIndex =
-    products.length === 0 ? 0 : Math.min(activeIndex, products.length - 1);
+  useEffect(() => {
+    if (!initialSlides) {
+      const fetchSlides = async () => {
+        try {
+          const response = await axios.get("/api/slider");
+          setSlides(response.data);
+        } catch (error) {
+          console.error("Failed to fetch slides:", error);
+        } finally {
+          setIsLoading(false);
+        }
+      };
+      fetchSlides();
+    }
+  }, [initialSlides]);
 
   const goToPrevious = () => {
-    if (products.length <= 1) return;
-
+    if (slides.length <= 1) return;
     setActiveIndex((currentIndex) =>
-      currentIndex === 0 ? products.length - 1 : currentIndex - 1,
+      currentIndex === 0 ? slides.length - 1 : currentIndex - 1,
     );
   };
 
   const goToNext = () => {
-    if (products.length <= 1) return;
-
-    setActiveIndex((currentIndex) => (currentIndex + 1) % products.length);
+    if (slides.length <= 1) return;
+    setActiveIndex((currentIndex) => (currentIndex + 1) % slides.length);
   };
 
-  return (
-    <section className="hero-shell" id="slider">
-      <div className="hero-copy">
-        {products[activeSlideIndex] ? (
-          <>
-            <p className="eyebrow">Featured Product</p>
-            <h2>{products[activeSlideIndex].name}</h2>
-            <p>{products[activeSlideIndex].description || "No description available."}</p>
-            <div className="hero-actions">
-              <CtaButton asChild>
-                <Link className="bg-white" href='/products'>View All Products</Link>
-              </CtaButton>
-              <CtaButton tone="light" asChild>
- 
-                <Link href={`/products/${products[activeSlideIndex].slug}`}>View Details</Link>
-              </CtaButton>
-            </div>
-          </>
-        ) : (
-          <div className="hero-copy-skeleton" aria-busy={loading}>
+  const currentSlide = slides[activeIndex];
+
+  if (isLoading) {
+    return (
+      <section className="hero-shell" id="slider">
+        <div className="hero-copy">
+          <div className="hero-copy-skeleton" aria-busy="true">
             <Skeleton className="hero-skeleton-eyebrow" />
             <Skeleton className="hero-skeleton-title" />
             <Skeleton className="hero-skeleton-text" />
@@ -81,6 +67,43 @@ export function HeroSlider() {
               <Skeleton className="hero-skeleton-button light" />
             </div>
           </div>
+        </div>
+        <div className="slider-shell">
+          <div className="slider">
+            <div className="slide-link">
+              <div className="slide-image-wrap slide-image-only">
+                <Skeleton className="hero-skeleton-image" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="hero-shell" id="slider">
+      <div className="hero-copy">
+        {currentSlide ? (
+          <>
+            <p className="eyebrow">{currentSlide.subtitle || "New Season"}</p>
+            <h2 className="break-all text-5xl" >{currentSlide.title || "Curated style for everyday wear"}</h2>
+            <p>{currentSlide.alt || "Discover the latest edit from our homepage collection."}</p>
+            <div className="hero-actions">
+              <CtaButton asChild>
+                <Link className="bg-white" href={currentSlide.linkUrl || '/products'}>
+                  {currentSlide.linkUrl ? "Shop Now" : "View All Products"}
+                </Link>
+              </CtaButton>
+              <CtaButton tone="light" asChild>
+                <Link href="/#products">View Details</Link>
+              </CtaButton>
+            </div>
+          </>
+        ) : (
+          <div className="hero-copy-skeleton">
+            <p className="text-[#888780]">No active slides available.</p>
+          </div>
         )}
       </div>
 
@@ -88,41 +111,38 @@ export function HeroSlider() {
         <div className="slider" aria-label="Featured clothing banners">
           <div
             className="slider-track"
-            style={{ transform: `translateX(-${activeSlideIndex * 100}%)` }}
+            style={{ transform: `translateX(-${activeIndex * 100}%)` }}
           >
-            {products.length === 0 && loading ? (
-              <div className="slide-link">
-                <div className="slide-image-wrap slide-image-only">
-                  <Skeleton className="hero-skeleton-image" />
-                </div>
-              </div>
-            ) : null}
-            {products.map((product, index) => (
-              <div
-                key={product.id}
-                className="slide-link cursor-pointer"
-                aria-label={`${product.name} - open product`}
-                onClick={() => router.push(`/products/${product.slug}`)}
-                role="button"
-                tabIndex={0}
-                onKeyDown={e => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    (e.target as HTMLElement).click();
-                  }
-                }}
-              >
+            {slides.map((slide, index) => {
+              const SlideContent = (
                 <div className="slide-image-wrap slide-image-only">
                   <Image
-                    src={product.images?.[0]?.url || "/placeholder.png"}
-                    alt={product.name}
+                    src={slide.url}
+                    alt={slide.alt || ""}
                     fill
                     priority={index === 0}
                     sizes="(max-width: 900px) 100vw, 50vw"
                     className="slide-image"
                   />
                 </div>
-              </div>
-            ))}
+              );
+
+              return (
+                <div
+                  key={slide.id}
+                  className="slide-link cursor-pointer"
+                  aria-label={slide.alt || `Hero slide ${index + 1}`}
+                >
+                  {slide.linkUrl ? (
+                    <Link href={slide.linkUrl} className="block w-full h-full">
+                      {SlideContent}
+                    </Link>
+                  ) : (
+                    SlideContent
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
         <div className="slider-controls">
@@ -133,7 +153,7 @@ export function HeroSlider() {
               size="icon-sm"
               className="slider-arrow"
               onClick={goToPrevious}
-              disabled={products.length <= 1}
+              disabled={slides.length <= 1}
               aria-label="Previous slide"
             >
               <ArrowLeft className="size-4" />
@@ -144,21 +164,21 @@ export function HeroSlider() {
               size="icon-sm"
               className="slider-arrow"
               onClick={goToNext}
-              disabled={products.length <= 1}
+              disabled={slides.length <= 1}
               aria-label="Next slide"
             >
               <ArrowRight className="size-4" />
             </Button>
           </div>
           <div className="slider-dots" aria-label="Choose slide">
-            {products.map((product, index) => (
+            {slides.map((slide, index) => (
               <button
-                key={product.id}
+                key={slide.id}
                 type="button"
-                className={index === activeSlideIndex ? "slider-dot is-active" : "slider-dot"}
+                className={index === activeIndex ? "slider-dot is-active" : "slider-dot"}
                 onClick={() => setActiveIndex(index)}
                 aria-label={`Go to slide ${index + 1}`}
-                aria-pressed={index === activeSlideIndex}
+                aria-pressed={index === activeIndex}
               />
             ))}
           </div>
