@@ -5,7 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = "postgresql://neondb_owner:npg_BHP3TfFADid2@ep-cold-unit-aol6ulsz.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require"
   schemas  = ["mini_e_commerce"]
 }
 

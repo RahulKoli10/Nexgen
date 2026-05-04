@@ -6,7 +6,7 @@ import { adminOrderInclude, formatAdminOrder } from "@/lib/admin-orders";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { createNotification } from "@/lib/notifications";
-import { NotifType } from "@prisma/client";
+import { NotifType, Prisma } from "@prisma/client";
 
 const typeMap: Record<OrderStatus, NotifType> = {
   PENDING: "ORDER_PLACED",
@@ -34,7 +34,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const requestedStatus = body.status;
 
-    const { order, shouldNotify } = await prisma.$transaction(async (tx) => {
+    const { order, shouldNotify } = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const existingOrder = await tx.order.findUnique({
         where: { id },
         select: {

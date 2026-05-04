@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@prisma/client";
 import { notifyAdmins } from "@/lib/notifications";
 
 type StockNotification = {
@@ -45,7 +46,7 @@ export const getOrdersByUserId = async (userId: string) => {
 };
 
 export const cancelOrderById = async (orderId: string, userId: string) => {
-  return await prisma.$transaction(async (tx) => {
+  return await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const order = await tx.order.findUnique({
       where: { id: orderId },
       include: {
@@ -126,7 +127,7 @@ export const createOrder = async ({
 }) => {
   const stockNotifications: StockNotification[] = [];
 
-  const order = await prisma.$transaction(async (tx) => {
+  const order = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const cartItems = await tx.cartItem.findMany({
       where: { userId },
       include: {

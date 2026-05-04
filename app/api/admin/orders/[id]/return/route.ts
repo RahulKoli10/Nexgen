@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdminSession } from "@/lib/admin-api";
 import { adminOrderInclude, formatAdminOrder } from "@/lib/admin-orders";
@@ -10,7 +11,7 @@ export async function PATCH(_request: Request, context: { params: Promise<{ id: 
   const { id } = await context.params;
 
   try {
-    const order = await prisma.$transaction(async (tx) => {
+    const order = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const existingOrder = await tx.order.findUnique({
         where: { id },
         select: {
