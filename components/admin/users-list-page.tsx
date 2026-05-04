@@ -20,7 +20,12 @@ export function UsersListPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get("page") ?? 1)));
+  const urlPage = Math.max(1, Number(searchParams?.get("page") ?? 1));
+
+  if (page !== urlPage) {
+    setPage(urlPage);
+  }
   const [total, setTotal] = useState(0);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
@@ -33,10 +38,6 @@ export function UsersListPage() {
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
-
-  useEffect(() => {
-    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
-  }, [searchParams]);
 
   const loadUsers = useCallback(async () => {
     setLoading(true);

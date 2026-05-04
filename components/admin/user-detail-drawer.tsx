@@ -23,8 +23,6 @@ export function UserDetailDrawer({ userId, onClose }: UserDetailDrawerProps) {
 
   useEffect(() => {
     if (!userId) {
-       (null);
-      setError(null);
       return;
     }
 

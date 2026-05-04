@@ -27,7 +27,12 @@ export function CategoriesListPage() {
   const searchParams = useSearchParams();
   const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get("page") ?? 1)));
+  const urlPage = Math.max(1, Number(searchParams?.get("page") ?? 1));
+
+  if (page !== urlPage) {
+    setPage(urlPage);
+  }
   const [total, setTotal] = useState(0);
   
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -61,15 +66,14 @@ export function CategoriesListPage() {
       .replace(/[^\w-]+/g, "");
   };
 
-  const watchName = watch("name");
-
   useEffect(() => {
-    setValue("slug", generateSlug(watchName), { shouldValidate: true });
-  }, [watchName]);
-
-  useEffect(() => {
-    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
-  }, [searchParams]);
+    const subscription = watch((value, { name }) => {
+      if (name === "name") {
+        setValue("slug", generateSlug(value.name || ""), { shouldValidate: true });
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [watch, setValue]);
 
   async function loadCategories() {
     try {
@@ -215,7 +219,7 @@ export function CategoriesListPage() {
             className="flex-1 bg-transparent outline-none text-xs min-w-[120px]"
           />
         </div>
-        <p className="text-[10px] text-slate-400 italic">Press Enter to add fields like "Size", "Color", etc.</p>
+        <p className="text-[10px] text-slate-400 italic">Press Enter to add fields like &quot;Size&quot;, &quot;Color&quot;, etc.</p>
       </div>
     );
   };

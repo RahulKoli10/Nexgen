@@ -20,7 +20,9 @@ export function BulkStockPage() {
   const [rows, setRows] = useState<StockRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, number>>({});
   const [saving, setSaving] = useState(false);
-  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [page, setPage] = useState(() =>
+    Math.max(1, Number(searchParams?.get("page") ?? 1)),
+  );
   const [total, setTotal] = useState(0);
 
   async function loadRows() {
@@ -31,28 +33,34 @@ export function BulkStockPage() {
     setRows(nextRows);
     setTotal(data.total ?? 0);
     setDrafts(
-      Object.fromEntries(nextRows.map((row: StockRow) => [row.variantId, row.stock]))
+      Object.fromEntries(
+        nextRows.map((row: StockRow) => [row.variantId, row.stock]),
+      ),
     );
   }
 
-  
-  useEffect(() => {
-    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
-  }, [searchParams]);
+  const urlPage = Math.max(1, Number(searchParams?.get("page") ?? 1));
+  if (page !== urlPage) {
+    setPage(urlPage);
+  }
 
-  
   useEffect(() => {
     let isMounted = true;
 
-    axios.get("/api/admin/products/bulk-stock", {
-      params: { page, limit: PAGE_SIZE },
-    })
+    axios
+      .get("/api/admin/products/bulk-stock", {
+        params: { page, limit: PAGE_SIZE },
+      })
       .then(({ data }) => {
         if (!isMounted) return;
         const nextRows = data.variants ?? [];
         setRows(nextRows);
         setTotal(data.total ?? 0);
-        setDrafts(Object.fromEntries(nextRows.map((row: StockRow) => [row.variantId, row.stock])));
+        setDrafts(
+          Object.fromEntries(
+            nextRows.map((row: StockRow) => [row.variantId, row.stock]),
+          ),
+        );
       });
 
     return () => {
@@ -60,11 +68,14 @@ export function BulkStockPage() {
     };
   }, [page]);
 
-  const totalPages = useMemo(() => Math.max(1, Math.ceil(total / PAGE_SIZE)), [total]);
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    [total],
+  );
 
   const changedRows = useMemo(
     () => rows.filter((row) => Number(drafts[row.variantId]) !== row.stock),
-    [drafts, rows]
+    [drafts, rows],
   );
 
   async function saveChanges() {
@@ -88,8 +99,12 @@ export function BulkStockPage() {
   return (
     <div className="grid gap-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Bulk Stock Update</h1>
-        <p className="mt-1 text-sm text-slate-500">Edit variant inventory inline and save in one request.</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-950">
+          Bulk Stock Update
+        </h1>
+        <p className="mt-1 text-sm text-slate-500">
+          Edit variant inventory inline and save in one request.
+        </p>
       </div>
 
       <section className="rounded-md border border-slate-200 bg-white shadow-sm">
@@ -106,8 +121,12 @@ export function BulkStockPage() {
             <tbody className="divide-y divide-slate-100">
               {rows.map((row) => (
                 <tr key={row.variantId}>
-                  <td className="px-5 py-4 font-medium text-slate-950">{row.productName}</td>
-                  <td className="px-5 py-4 text-slate-600">{row.variantName}</td>
+                  <td className="px-5 py-4 font-medium text-slate-950">
+                    {row.productName}
+                  </td>
+                  <td className="px-5 py-4 text-slate-600">
+                    {row.variantName}
+                  </td>
                   <td className="px-5 py-4 text-slate-600">{row.stock}</td>
                   <td className="px-5 py-4">
                     <input
@@ -115,7 +134,10 @@ export function BulkStockPage() {
                       min="0"
                       value={drafts[row.variantId] ?? 0}
                       onChange={(event) =>
-                        setDrafts((current) => ({ ...current, [row.variantId]: Number(event.target.value) }))
+                        setDrafts((current) => ({
+                          ...current,
+                          [row.variantId]: Number(event.target.value),
+                        }))
                       }
                       className="h-10 w-32 rounded-md border border-slate-200 px-3 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     />
@@ -126,9 +148,15 @@ export function BulkStockPage() {
           </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-4">
-          <p className="text-sm text-slate-500">{changedRows.length} pending changes</p>
+          <p className="text-sm text-slate-500">
+            {changedRows.length} pending changes
+          </p>
           <div className="flex items-center gap-3">
-            <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} />
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              onPageChange={setPage}
+            />
             <button
               type="button"
               disabled={saving || changedRows.length === 0}

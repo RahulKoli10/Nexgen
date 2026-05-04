@@ -46,7 +46,12 @@ export function OrdersListPage() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [range, setRange] = useState<DateRange | undefined>();
-  const [page, setPage] = useState(() => Math.max(1, Number(searchParams.get("page") ?? 1)));
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get("page") ?? 1)));
+  const urlPage = Math.max(1, Number(searchParams?.get("page") ?? 1));
+
+  if (page !== urlPage) {
+    setPage(urlPage);
+  }
   const [total, setTotal] = useState(0);
   const [returnOrder, setReturnOrder] = useState<AdminOrder | null>(null);
   const [grantingReturnId, setGrantingReturnId] = useState<string | null>(null);
@@ -57,16 +62,12 @@ export function OrdersListPage() {
   const to = formatDateInput(range?.to);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
+    const timer = window.setTimeout(() =>  {
       setPage(1);
       setSearch(searchInput);
     }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
-
-  useEffect(() => {
-    setPage(Math.max(1, Number(searchParams.get("page") ?? 1)));
-  }, [searchParams]);
 
   useEffect(() => {
     async function loadOrders() {

@@ -408,11 +408,11 @@ export default function OrdersPage() {
     setReturningOrderId(order.id);
 
     try {
-      await axios.post("/api/order/user", { orderId: order.id, action: "return" });
-      setOrders((prev) =>
-        prev.map((item) =>
-          item.id === order.id ? { ...item, status: "RETURN_REQUESTED" } : item,
-        ),
+      await api.post("/order/user", { orderId: order.id, action: "return" });
+      queryClient.setQueryData<Order[]>(queryKeys.orders, (current = []) =>
+        current.map((item) =>
+          item.id === order.id ? { ...item, status: "RETURN_REQUESTED" } : item
+        )
       );
       showToast("Return request sent.", "success");
     } catch {
