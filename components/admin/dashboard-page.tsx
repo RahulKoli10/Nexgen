@@ -60,26 +60,53 @@ export function DashboardPage() {
   const [isChartReady, setIsChartReady] = useState(false);
 
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => setIsChartReady(true));
+  const frame = window.requestAnimationFrame(() => {
+    setIsChartReady(true);
+  });
 
-    async function loadDashboard() {
-      const [statsResponse, revenueResponse, topProductsResponse, ordersResponse] = await Promise.all([
-        axios.get("/api/admin/stats"),
-        axios.get("/api/admin/stats/revenue", { params: { days: 7 } }),
-        axios.get("/api/admin/stats/top-products"),
-        axios.get("/api/admin/orders", { params: { limit: 10, sort: "createdAt_desc" } }),
-      ]);
+  const controller = new AbortController();
 
-      setStats(statsResponse.data);
-      setRevenue(revenueResponse.data);
-      setTopProducts(topProductsResponse.data);
-      setRecentOrders(ordersResponse.data.orders ?? []);
+  async function fetchJSON<T>(url: string): Promise<T> {
+    const res = await fetch(url, {
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      throw new Error(`Failed to fetch ${url}: ${res.status}`);
     }
 
-    loadDashboard();
+    return res.json();
+  }
 
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
+  async function loadDashboard() {
+    try {
+      const [stats, revenue, topProducts, orders] = await Promise.all([
+        fetchJSON<Stats>("/api/admin/stats"),
+        fetchJSON<RevenuePoint[]>("/api/admin/stats/revenue?days=7"),
+        fetchJSON<TopProduct[]>("/api/admin/stats/top-products"),
+        fetchJSON<{ orders: RecentOrder[] }>(
+          "/api/admin/orders?limit=10&sort=createdAt_desc"
+        ),
+      ]);
+
+      setStats(stats);
+      setRevenue(revenue);
+      setTopProducts(topProducts);
+      setRecentOrders(orders.orders ?? []);
+    } catch (error) {
+      if ((error as Error).name !== "AbortError") {
+        console.error("Dashboard load failed:", error);
+      }
+    }
+  }
+
+  loadDashboard();
+
+  return () => {
+    controller.abort();
+    window.cancelAnimationFrame(frame);
+  };
+}, []);
 
   const chartData = useMemo(
     () =>
