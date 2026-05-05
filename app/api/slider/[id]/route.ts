@@ -10,11 +10,12 @@ cloudinary.config({
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const existingSlide = await prisma.sliderImage.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!existingSlide) {
@@ -76,7 +77,7 @@ export async function PATCH(
     }
 
     const updatedSlide = await prisma.sliderImage.update({
-      where: { id: params.id },
+      where: { id },
       data: updateData,
     });
 
@@ -89,11 +90,12 @@ export async function PATCH(
 
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const slide = await prisma.sliderImage.findUnique({
-      where: { id: params.id },
+      where: { id },
     });
 
     if (!slide) {
@@ -107,7 +109,7 @@ export async function DELETE(
     }
 
     await prisma.sliderImage.delete({
-      where: { id: params.id },
+      where: { id },
     });
 
     return NextResponse.json({ success: true });
