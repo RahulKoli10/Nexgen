@@ -56,6 +56,8 @@ export default function SliderPage() {
   
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const [editPreviewUrl, setEditPreviewUrl] = useState<string | null>(null);
   const [uploadData, setUploadData] = useState({
     alt: "",
     title: "",
@@ -181,6 +183,20 @@ export default function SliderPage() {
       linkUrl: slide.linkUrl || "",
       active: slide.active
     });
+    setEditFile(null);
+    setEditPreviewUrl(slide.url);
+  };
+
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(selectedFile.type)) {
+        toast.error("Only JPG, PNG and WEBP are allowed");
+        return;
+      }
+      setEditFile(selectedFile);
+      setEditPreviewUrl(URL.createObjectURL(selectedFile));
+    }
   };
 
   const handleUpdate = async (e: React.FormEvent) => {
@@ -188,7 +204,22 @@ export default function SliderPage() {
     if (!editingId) return;
 
     try {
-      const response = await axios.patch(`/api/admin/slider/${editingId}`, editData);
+      let data: any = editData;
+      let config = {};
+
+      if (editFile) {
+        const formData = new FormData();
+        formData.append("file", editFile);
+        formData.append("alt", editData.alt);
+        formData.append("title", editData.title);
+        formData.append("subtitle", editData.subtitle);
+        formData.append("linkUrl", editData.linkUrl);
+        formData.append("active", String(editData.active));
+        data = formData;
+        config = { headers: { "Content-Type": "multipart/form-data" } };
+      }
+
+      const response = await axios.patch(`/api/admin/slider/${editingId}`, data, config);
       setSlides((prev) => 
         prev.map((s) => s.id === editingId ? response.data : s)
       );
@@ -405,12 +436,23 @@ export default function SliderPage() {
                         </div>
                         
                         <div className="relative h-16 w-24 shrink-0 overflow-hidden rounded-lg border border-[#F1EFE8] bg-[#F1EFE8]">
-                          <Image src={slide.url} alt={slide.alt || ""} fill className="object-cover" />
+                          <Image src={editingId === slide.id && editPreviewUrl ? editPreviewUrl : slide.url} alt={slide.alt || ""} fill className="object-cover" />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           {editingId === slide.id ? (
                             <form onSubmit={handleUpdate} className="grid gap-3 py-1">
+                              <div className="grid grid-cols-1 gap-3">
+                                <div className="grid gap-1">
+                                  <label className="text-[10px] font-bold uppercase tracking-wider text-[#888780]">Update Image (optional)</label>
+                                  <input 
+                                    type="file" 
+                                    accept="image/jpeg,image/png,image/webp"
+                                    onChange={handleEditFileChange}
+                                    className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-[#185FA5]/10 file:text-[#185FA5] hover:file:bg-[#185FA5]/20"
+                                  />
+                                </div>
+                              </div>
                               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <div className="grid gap-1">
                                   <label htmlFor={`edit-title-${slide.id}`} className="text-[10px] font-bold uppercase tracking-wider text-[#888780]">Heading</label>
